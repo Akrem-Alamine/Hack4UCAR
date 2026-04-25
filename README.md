@@ -557,17 +557,19 @@ L'URL publique générée (ex : `https://xxx.trycloudflare.com`) est accessible 
 |---|---|
 | `super@ucar.tn` | Vue consolidée de tous les établissements + classement + comparaison |
 
-### Par établissement (même structure pour ENSTAB, ENIT, ESPRIT, FST, ISETSOUSSE)
+### Par établissement (même structure pour IHEC, INSAT, ENIB, FSB, SUP'COM)
+
+> Remplacer `<sigle>` par : `ihec`, `insat`, `enib`, `fsb`, `supcom`
 
 | Email | Rôle | Données accessibles |
 |---|---|---|
-| `president@enstab.tn` | Président | Tous les domaines de l'établissement |
-| `academique@enstab.tn` | Département | Académique uniquement |
-| `finance@enstab.tn` | Département | Finance uniquement |
-| `rh@enstab.tn` | Département | Ressources Humaines uniquement |
-| `insertion@enstab.tn` | Département | Insertion Professionnelle uniquement |
-| `esg@enstab.tn` | Département | ESG / RSE uniquement |
-| `recherche@enstab.tn` | Département | Recherche uniquement |
+| `president@<sigle>.tn` | Président | Tous les domaines de l'établissement |
+| `academique@<sigle>.tn` | Département | Académique uniquement |
+| `finance@<sigle>.tn` | Département | Finance uniquement |
+| `rh@<sigle>.tn` | Département | Ressources Humaines uniquement |
+| `insertion@<sigle>.tn` | Département | Insertion Professionnelle uniquement |
+| `esg@<sigle>.tn` | Département | ESG / RSE uniquement |
+| `recherche@<sigle>.tn` | Département | Recherche uniquement |
 
 **Règle de scoping** : un compte département ne peut ni voir, ni importer de données en dehors de son domaine — le backend l'applique côté serveur, indépendamment de ce que le frontend envoie.
 
@@ -842,23 +844,32 @@ L'URL générée est accessible depuis n'importe quel appareil, réseau ou pays 
 
 ## Données de démonstration
 
-Le script `seed_demo_data.py` génère :
+Le script `seed_demo_data.py` génère des données réelles pour 5 établissements de l'**Université de Carthage** :
+
+| Établissement | Acronyme | Type | Ville |
+|---|---|---|---|
+| Institut des Hautes Études Commerciales de Carthage | **IHEC** | Institut Supérieur | Carthage |
+| Institut National des Sciences Appliquées et de Technologie | **INSAT** | Institut National | Tunis |
+| École Nationale d'Ingénieurs de Bizerte | **ENIB** | École Nationale | Bizerte |
+| Faculté des Sciences de Bizerte | **FSB** | Faculté | Bizerte |
+| École Supérieure des Communications de Tunis | **SUP'COM** | École Supérieure | Ariana |
 
 | Élément | Quantité |
 |---|---|
-| Établissements | 5 (ENSTAB, ENIT, ESPRIT, FST, ISETSOUSSE) |
+| Établissements | 5 (IHEC, INSAT, ENIB, FSB, SUP'COM) |
 | Départements | 30 (6 par établissement) |
-| Utilisateurs | 36 (1 président + 6 départements × 5 établissements) + 1 super admin |
+| Utilisateurs | 37 (1 super admin + 1 président + 6 départements × 5 établissements) |
 | Enregistrements KPI | 330 (5 établissements × 6 domaines × ~4 indicateurs × 3 semestres) |
 | Règles d'alerte | 4 (abandon critique, réussite faible, budget, absentéisme) |
-| Alertes déclenchées | ~6 (dont 1 critique ENSTAB, 1 avertissement ESPRIT) |
+| Alertes déclenchées | ~3 (1 critique IHEC, 1 avertissement ENIB, 1 info SUP'COM) |
 
 **Scénarios de démonstration intégrés :**
 
-- 🔴 **ENSTAB** : taux d'abandon passe de 7% → 8% → **22%** (anomalie Z-score + alerte critique)
-- 🟡 **ESPRIT** : taux d'exécution budgétaire à **97.7%** (risque dépassement)
-- 📈 **ENIT** : meilleur établissement toutes catégories (benchmark de référence)
-- 📉 **ISETSOUSSE** : profil en amélioration progressive (tendance positive)
+- 🔴 **IHEC** : taux d'abandon passe de 7% → 8% → **22%** (anomalie Z-score + alerte critique)
+- 🟡 **ENIB** : taux d'exécution budgétaire à **97.7%** (risque dépassement budgétaire)
+- 📈 **INSAT** : meilleur établissement toutes catégories, 90%+ réussite (benchmark de référence)
+- 📊 **FSB** : grande faculté stable, forte activité recherche (72+ publications)
+- 📉 **SUP'COM** : profil en amélioration progressive sur 3 semestres (tendance positive)
 
 ---
 
