@@ -4,8 +4,18 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { IngestionJob, DOMAIN_LABELS, INDICATOR_LABELS } from "@/lib/types";
-import { Upload, FileText, Image, FileSpreadsheet, CheckCircle, XCircle, Loader2, Eye, RefreshCw, Download } from "lucide-react";
+import { Upload, FileText, Image, FileSpreadsheet, CheckCircle, XCircle, Loader2, Eye, RefreshCw, AlertTriangle } from "lucide-react";
 import clsx from "clsx";
+
+interface DryRunResult {
+  imported: number;
+  errors: number;
+  warnings: string[];
+  ai_normalized: boolean;
+  rows: { row: number; domain: string; indicator_key: string; value: number; unit: string }[];
+  error_details: { row: number; error: string }[];
+  message: string;
+}
 
 const STATUS_CONFIG = {
   pending:    { label: "En attente",    color: "text-gray-500",  bg: "bg-gray-100",  icon: Loader2 },
@@ -35,6 +45,7 @@ export default function IngestionPage() {
   const [dragOver, setDragOver] = useState(false);
   const [loadingJobs, setLoadingJobs] = useState(false);
   const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [pendingUpload, setPendingUpload] = useState<{ file: File; dryRun: DryRunResult } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -65,6 +76,39 @@ export default function IngestionPage() {
     return () => { if (pollRef.current) clearTimeout(pollRef.current); };
   }, [jobs]);
 
+  const commitUpload = async (file: File) => {
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+    const isDocument = ["pdf", "png", "jpg", "jpeg", "tiff", "bmp"].includes(ext);
+    const endpoint = isDocument ? "/ingestion/upload-document" : "/ingestion/upload";
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("institution_id", String(selectedInstitution!));
+    if (!isDocument) formData.append("dry_run", "false");
+
+    setUploading(true);
+    try {
+      const res = await api.post(endpoint, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setUploadResult({
+        success: true,
+        message: isDocument
+          ? `${file.name} — Extraction IA démarrée (job #${res.data.job_id})`
+          : `✓ ${file.name} — ${res.data.message}`,
+      });
+    } catch (err: any) {
+      setUploadResult({
+        success: false,
+        message: `Erreur : ${err.response?.data?.detail || err.message}`,
+      });
+    } finally {
+      setUploading(false);
+      setPendingUpload(null);
+      fetchJobs();
+    }
+  };
+
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     if (!selectedInstitution) {
@@ -72,38 +116,46 @@ export default function IngestionPage() {
       return;
     }
 
-    setUploading(true);
     setUploadResult(null);
 
     for (const file of Array.from(files)) {
       const ext = file.name.split(".").pop()?.toLowerCase() || "";
       const isDocument = ["pdf", "png", "jpg", "jpeg", "tiff", "bmp"].includes(ext);
-      const endpoint = isDocument ? "/ingestion/upload-document" : "/ingestion/upload";
 
+      if (isDocument) {
+        await commitUpload(file);
+        continue;
+      }
+
+      // Dry-run first for structured files
+      setUploading(true);
       const formData = new FormData();
       formData.append("file", file);
       formData.append("institution_id", String(selectedInstitution));
+      formData.append("dry_run", "true");
 
       try {
-        const res = await api.post(endpoint, formData, {
+        const res = await api.post<DryRunResult>("/ingestion/upload", formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });
-        setUploadResult({
-          success: true,
-          message: isDocument
-            ? `📄 ${file.name} — Extraction IA démarrée (job #${res.data.job_id})`
-            : `✓ ${file.name} — ${res.data.message}`,
-        });
+        const dryResult = res.data;
+
+        const hasWarnings = dryResult.warnings.length > 0 || dryResult.errors > 0;
+        if (hasWarnings) {
+          setUploading(false);
+          setPendingUpload({ file, dryRun: dryResult });
+        } else {
+          setUploading(false);
+          await commitUpload(file);
+        }
       } catch (err: any) {
+        setUploading(false);
         setUploadResult({
           success: false,
           message: `Erreur : ${err.response?.data?.detail || err.message}`,
         });
       }
     }
-
-    setUploading(false);
-    fetchJobs();
   };
 
   const openJob = async (job: IngestionJob) => {
@@ -279,6 +331,75 @@ export default function IngestionPage() {
           )}
         </div>
       </div>
+
+      {/* Dry-run warning modal */}
+      {pendingUpload && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b border-gray-100 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                <AlertTriangle size={18} className="text-amber-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-800">Avertissement avant import</h3>
+                <p className="text-xs text-gray-500 mt-0.5">{pendingUpload.file.name}</p>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Warnings */}
+              {pendingUpload.dryRun.warnings.length > 0 && (
+                <div className="space-y-2">
+                  {pendingUpload.dryRun.warnings.map((w, i) => (
+                    <div key={i} className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                      <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                      {w}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Row errors preview */}
+              {pendingUpload.dryRun.error_details.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-1.5">
+                    Lignes avec erreurs ({pendingUpload.dryRun.error_details.length}) :
+                  </p>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {pendingUpload.dryRun.error_details.map((e, i) => (
+                      <div key={i} className="text-xs text-red-600 bg-red-50 rounded px-2 py-1">
+                        Ligne {e.row} — {e.error}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Summary */}
+              <p className="text-sm text-gray-600">
+                <span className="font-semibold text-gray-800">{pendingUpload.dryRun.imported}</span> indicateur(s) seraient importé(s),{" "}
+                <span className="font-semibold text-red-600">{pendingUpload.dryRun.errors}</span> ligne(s) ignorée(s).
+              </p>
+              <p className="text-sm text-gray-500">Voulez-vous continuer l'import ?</p>
+            </div>
+
+            <div className="px-6 pb-6 flex gap-3 justify-end">
+              <button
+                onClick={() => { setPendingUpload(null); setUploadResult(null); }}
+                className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => commitUpload(pendingUpload.file)}
+                className="px-4 py-2 text-sm font-medium text-white bg-ucar-blue rounded-lg hover:bg-ucar-blue/90"
+              >
+                Continuer quand même
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Job detail modal */}
       {selectedJob && (

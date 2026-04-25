@@ -4,7 +4,6 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import KPICard from "@/components/dashboard/KPICard";
 import KPIChart from "@/components/dashboard/KPIChart";
 import ComparisonChart from "@/components/dashboard/ComparisonChart";
-import UploadButton from "@/components/dashboard/UploadButton";
 import { api } from "@/lib/api";
 import { KPIRecord, KPITrend, InstitutionRanking, InstitutionHealth, DOMAIN_LABELS } from "@/lib/types";
 import { useAuthStore } from "@/store/auth";
@@ -191,7 +190,6 @@ export default function DashboardPage() {
                 {anomalyCount} anomalie{anomalyCount > 1 ? "s" : ""}
               </span>
             )}
-            <UploadButton institutionId={selectedInstitution} onSuccess={fetchData} />
             <button
               onClick={fetchData}
               disabled={loading}
@@ -290,7 +288,7 @@ export default function DashboardPage() {
         ) : filteredKpis.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
             <p className="text-gray-400 text-sm">Aucune donnée disponible pour ce domaine.</p>
-            <p className="text-gray-400 text-xs mt-1">Utilisez le bouton "Importer" pour charger vos données.</p>
+            <p className="text-gray-400 text-xs mt-1">Accédez à la page "Ingestion" pour importer vos données.</p>
           </div>
         ) : selectedInstitution ? (
           /* Single institution — flat grid */

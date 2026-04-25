@@ -38,6 +38,65 @@ DOMAIN_ALIASES = {
 
 UNSTRUCTURED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".gif", ".webp"}
 
+# Keyword patterns for indicator key normalization — order matters (first match wins)
+# Each tuple: (regex pattern to search in normalized key, canonical key)
+_INDICATOR_PATTERNS = [
+    # Academic
+    (r"abandon",                               "dropout_rate"),
+    (r"reussite",                              "success_rate"),
+    (r"presence",                              "attendance_rate"),
+    (r"redoublement",                          "repetition_rate"),
+    # Finance
+    (r"budget.*(alloue|allocated|alloc)",      "budget_allocated"),
+    (r"budget.*(consomme|consumed|depense)",   "budget_consumed"),
+    (r"execution.*budget|budget.*execution",   "budget_execution_rate"),
+    (r"cout.*etudiant|etudiant.*cout",         "cost_per_student"),
+    # HR
+    (r"absenteisme",                           "absenteeism_rate"),
+    (r"(effectif|headcount).*enseignant",      "teaching_headcount"),
+    (r"(effectif|headcount).*admin",           "admin_headcount"),
+    (r"(heures|hours).*formation|formation.*heures", "training_hours"),
+    # Insertion / employability
+    (r"employabilite",                         "employability_rate"),
+    (r"delai.*insertion|insertion.*delai",     "insertion_delay_months"),
+    (r"convention.*national|national.*convent","national_convention_rate"),
+    (r"convention.*intern|intern.*convent",    "international_convention_rate"),
+    # ESG
+    (r"energie.*kwh|kwh|consommation.*energ",  "energy_consumption_kwh"),
+    (r"carbone|carbon",                        "carbon_footprint_ton"),
+    (r"recyclage",                             "recycling_rate"),
+    # Research
+    (r"publication",                           "publications_count"),
+    (r"projet.*actif|actif.*projet",           "active_projects"),
+    (r"financement.*tnd|funding",              "funding_tnd"),
+]
+
+
+def _normalize_indicator_key(raw: str) -> str:
+    """Normalize any French/English/variant indicator name to a canonical snake_case key.
+
+    Steps:
+    1. Strip accents
+    2. Lowercase + replace separators with underscores
+    3. Exact alias lookup
+    4. Keyword/regex fallback so variations like 'taux d abandon etudiants'
+       still resolve to 'dropout_rate'
+    """
+    import re, unicodedata
+    s = unicodedata.normalize("NFD", raw)
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    s = s.lower().strip()
+    for ch in (" ", "-", "'", "’", "\"", "/"):
+        s = s.replace(ch, "_")
+    while "__" in s:
+        s = s.replace("__", "_")
+    s = s.strip("_")
+
+    for pattern, canonical in _INDICATOR_PATTERNS:
+        if re.search(pattern, s):
+            return canonical
+    return s
+
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 # Allowed magic byte signatures per extension (None = text file, skip check)
@@ -166,9 +225,15 @@ async def upload_kpi_file(
     file: UploadFile = File(...),
     institution_id: int = Form(...),
     period_label_override: Optional[str] = Form(None),
+    dry_run: bool = Form(False),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    Import Excel/CSV KPI data.
+    Pass dry_run=true to validate and preview without saving — the response will include
+    'warnings' so the frontend can show a confirmation modal before committing.
+    """
     scoped_id = get_scoped_institution_id(institution_id, current_user)
     if not scoped_id:
         raise HTTPException(status_code=403, detail="Accès non autorisé à cet établissement")
@@ -180,7 +245,6 @@ async def upload_kpi_file(
     filename = file.filename or ""
     ext = Path(filename).suffix.lower()
 
-    # Route unstructured files to the AI pipeline
     if ext in UNSTRUCTURED_EXTENSIONS:
         raise HTTPException(
             status_code=422,
@@ -196,20 +260,29 @@ async def upload_kpi_file(
         raise HTTPException(status_code=400, detail="Impossible de lire le fichier. Vérifiez le format et réessayez.")
 
     df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
-    missing = REQUIRED_COLS - set(df.columns)
+    missing_cols = REQUIRED_COLS - set(df.columns)
 
-    # If columns don't match, try AI-assisted normalization
     ai_normalized = False
-    if missing:
+    if missing_cols:
         df, ai_normalized = _ai_normalize_dataframe(df)
-        missing = REQUIRED_COLS - set(df.columns)
+        missing_cols = REQUIRED_COLS - set(df.columns)
 
-    if missing:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Colonnes manquantes même après normalisation IA : {', '.join(sorted(missing))}. "
-                   f"Colonnes reçues : {', '.join(df.columns.tolist())}",
-        )
+    warnings: list[str] = []
+    if ai_normalized:
+        warnings.append("Les colonnes ont été normalisées automatiquement par l'IA.")
+    if missing_cols:
+        warnings.append(f"Colonnes manquantes : {', '.join(sorted(missing_cols))}.")
+
+    # Return early on dry_run if columns are irrecoverably missing
+    if missing_cols:
+        return {
+            "dry_run": dry_run,
+            "imported": 0, "errors": 0,
+            "ai_normalized": ai_normalized,
+            "warnings": warnings,
+            "rows": [], "error_details": [],
+            "message": warnings[-1],
+        }
 
     dept_cache: dict[str, int] = {}
     errors: list[dict] = []
@@ -232,7 +305,7 @@ async def upload_kpi_file(
         domain = _normalize_domain(
             current_user.domain_scope if current_user.domain_scope else str(row.get("domain", ""))
         )
-        indicator_key = str(row.get("indicator_key", "")).strip().lower().replace(" ", "_")
+        indicator_key = _normalize_indicator_key(str(row.get("indicator_key", "")))
         unit = str(row.get("unit", "")).strip()
         period_label = period_label_override or str(row.get("period_label", "")).strip()
         notes = str(row.get("notes", "")).strip() if "notes" in df.columns else None
@@ -248,22 +321,65 @@ async def upload_kpi_file(
                 dept_cache[code] = dept.id if dept else -1
             dept_id = dept_cache[code] if dept_cache[code] != -1 else None
 
-        db.add(KPIRecord(
-            institution_id=scoped_id, department_id=dept_id,
-            domain=domain, indicator_key=indicator_key,
-            value=value, unit=unit, period_label=period_label,
-            period_start=period_start, period_end=period_end,
-            notes=notes or None, created_by=current_user.id,
-        ))
         imported.append({"row": row_num, "domain": domain, "indicator_key": indicator_key, "value": value, "unit": unit})
 
-    db.commit()
-    msg = f"{len(imported)} indicateur(s) importé(s), {len(errors)} erreur(s)."
+        if not dry_run:
+            existing = db.query(KPIRecord).filter(
+                KPIRecord.institution_id == scoped_id,
+                KPIRecord.indicator_key == indicator_key,
+                KPIRecord.period_label == period_label,
+            ).first()
+            if existing:
+                existing.value = value
+                existing.unit = unit
+                existing.domain = domain
+                existing.department_id = dept_id
+                existing.period_start = period_start
+                existing.period_end = period_end
+                existing.notes = notes or None
+            else:
+                db.add(KPIRecord(
+                    institution_id=scoped_id, department_id=dept_id,
+                    domain=domain, indicator_key=indicator_key,
+                    value=value, unit=unit, period_label=period_label,
+                    period_start=period_start, period_end=period_end,
+                    notes=notes or None, created_by=current_user.id,
+                ))
+
+    if errors:
+        warnings.append(f"{len(errors)} ligne(s) ignorée(s) à cause d'erreurs de format.")
+
+    prefix = "[Simulation] " if dry_run else ""
+    msg = f"{prefix}{len(imported)} indicateur(s) {'à importer' if dry_run else 'importé(s)'}, {len(errors)} erreur(s)."
     if ai_normalized:
-        msg = f"[IA] Colonnes normalisées automatiquement. " + msg
+        msg = "[IA] Colonnes normalisées automatiquement. " + msg
+
+    if not dry_run:
+        db.commit()
+        # Record job in history
+        ext = Path(filename).suffix.lower().lstrip(".")
+        source = JobSourceType.excel if ext in ("xlsx", "xls") else JobSourceType.csv
+        job = IngestionJob(
+            institution_id=scoped_id,
+            created_by=current_user.id,
+            source_type=source,
+            original_filename=filename,
+            file_path="",
+            status=JobStatus.completed,
+            kpi_count=len(imported),
+            imported_count=len(imported),
+            quality_score=100 if not errors else round(len(imported) / max(len(imported) + len(errors), 1) * 100),
+            completed_at=datetime.utcnow(),
+            error_message="; ".join(e["error"] for e in errors[:3]) if errors else None,
+        )
+        db.add(job)
+        db.commit()
+
     return {
+        "dry_run": dry_run,
         "imported": len(imported), "errors": len(errors),
         "ai_normalized": ai_normalized,
+        "warnings": warnings,
         "rows": imported[:20], "error_details": errors,
         "message": msg,
     }
@@ -373,18 +489,30 @@ def _process_document_job(job_id: int, file_bytes: bytes, filename: str):
                 if period_label == "N/A":
                     period_label = "Document importé"
 
-                db.add(KPIRecord(
-                    institution_id=job.institution_id,
-                    created_by=job.created_by,
-                    domain=_normalize_domain(kpi["domain"]),
-                    indicator_key=kpi["indicator_key"].strip().lower().replace(" ", "_"),
-                    value=float(kpi["value"]),
-                    unit=kpi.get("unit", ""),
-                    period_label=period_label,
-                    period_start=today,
-                    period_end=today,
-                    notes=f"Extrait automatiquement depuis {filename}",
-                ))
+                norm_key = _normalize_indicator_key(kpi["indicator_key"])
+                existing = db.query(KPIRecord).filter(
+                    KPIRecord.institution_id == job.institution_id,
+                    KPIRecord.indicator_key == norm_key,
+                    KPIRecord.period_label == period_label,
+                ).first()
+                if existing:
+                    existing.value = float(kpi["value"])
+                    existing.unit = kpi.get("unit", "")
+                    existing.domain = _normalize_domain(kpi["domain"])
+                    existing.notes = f"Mis à jour depuis {filename}"
+                else:
+                    db.add(KPIRecord(
+                        institution_id=job.institution_id,
+                        created_by=job.created_by,
+                        domain=_normalize_domain(kpi["domain"]),
+                        indicator_key=norm_key,
+                        value=float(kpi["value"]),
+                        unit=kpi.get("unit", ""),
+                        period_label=period_label,
+                        period_start=today,
+                        period_end=today,
+                        notes=f"Extrait automatiquement depuis {filename}",
+                    ))
                 imported += 1
             except Exception:
                 continue
