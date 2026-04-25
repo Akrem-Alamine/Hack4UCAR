@@ -283,7 +283,7 @@ export default function DashboardPage() {
         {/* KPI Cards */}
         {loading ? (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {[...Array(6)].map((_, i) => (
+            {[...Array(8)].map((_, i) => (
               <div key={i} className="bg-white rounded-xl p-5 border border-gray-100 animate-pulse h-32" />
             ))}
           </div>
@@ -292,11 +292,53 @@ export default function DashboardPage() {
             <p className="text-gray-400 text-sm">Aucune donnée disponible pour ce domaine.</p>
             <p className="text-gray-400 text-xs mt-1">Utilisez le bouton "Importer" pour charger vos données.</p>
           </div>
-        ) : (
+        ) : selectedInstitution ? (
+          /* Single institution — flat grid */
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {filteredKpis.map((kpi) => (
               <KPICard key={`${kpi.institution_id}-${kpi.indicator_key}`} {...kpi} />
             ))}
+          </div>
+        ) : (
+          /* Consolidated view — grouped by institution */
+          <div className="space-y-6">
+            {Object.entries(
+              filteredKpis.reduce((acc, kpi) => {
+                if (!acc[kpi.institution_id]) {
+                  acc[kpi.institution_id] = {
+                    name: kpi.institution_name,
+                    acronym: kpi.institution_acronym,
+                    kpis: [],
+                  };
+                }
+                acc[kpi.institution_id].kpis.push(kpi);
+                return acc;
+              }, {} as Record<number, { name: string; acronym: string; kpis: KPIRecord[] }>)
+            ).map(([instId, group]) => {
+              const anomalies = group.kpis.filter((k) => k.is_anomaly).length;
+              return (
+                <div key={instId} className="bg-white rounded-xl border border-gray-100 p-4">
+                  {/* Institution header */}
+                  <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-100">
+                    <span className="text-xs font-bold text-white bg-ucar-blue px-2.5 py-1 rounded-lg tracking-wide">
+                      {group.acronym}
+                    </span>
+                    <span className="text-sm font-semibold text-gray-700 flex-1">{group.name}</span>
+                    {anomalies > 0 && (
+                      <span className="flex items-center gap-1 text-xs font-medium text-red-600 bg-red-50 border border-red-100 px-2.5 py-1 rounded-full">
+                        <AlertTriangle size={10} />
+                        {anomalies} anomalie{anomalies > 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {group.kpis.map((kpi) => (
+                      <KPICard key={`${kpi.institution_id}-${kpi.indicator_key}`} {...kpi} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
