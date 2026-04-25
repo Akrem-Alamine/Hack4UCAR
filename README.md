@@ -557,9 +557,9 @@ L'URL publique générée (ex : `https://xxx.trycloudflare.com`) est accessible 
 |---|---|
 | `super@ucar.tn` | Vue consolidée de tous les établissements + classement + comparaison |
 
-### Par établissement (même structure pour IHEC, INSAT, ENIB, FSB, SUP'COM)
+### Par établissement (même structure pour ENSTAB, IHEC, INSAT, ENIB, FSB, SUP'COM)
 
-> Remplacer `<sigle>` par : `ihec`, `insat`, `enib`, `fsb`, `supcom`
+> Remplacer `<sigle>` par : `enstab`, `ihec`, `insat`, `enib`, `fsb`, `supcom`
 
 | Email | Rôle | Données accessibles |
 |---|---|---|
@@ -846,8 +846,11 @@ L'URL générée est accessible depuis n'importe quel appareil, réseau ou pays 
 
 Le script `seed_demo_data.py` génère des données réelles pour 5 établissements de l'**Université de Carthage** :
 
+Le script `seed_demo_data.py` génère des données réelles pour 6 établissements de l'**Université de Carthage** :
+
 | Établissement | Acronyme | Type | Ville |
 |---|---|---|---|
+| École Nationale des Sciences et Technologies Avancées de Borj Cédria | **ENSTAB** | École Nationale | Borj Cédria |
 | Institut des Hautes Études Commerciales de Carthage | **IHEC** | Institut Supérieur | Carthage |
 | Institut National des Sciences Appliquées et de Technologie | **INSAT** | Institut National | Tunis |
 | École Nationale d'Ingénieurs de Bizerte | **ENIB** | École Nationale | Bizerte |
@@ -856,18 +859,19 @@ Le script `seed_demo_data.py` génère des données réelles pour 5 établisseme
 
 | Élément | Quantité |
 |---|---|
-| Établissements | 5 (IHEC, INSAT, ENIB, FSB, SUP'COM) |
-| Départements | 30 (6 par établissement) |
-| Utilisateurs | 37 (1 super admin + 1 président + 6 départements × 5 établissements) |
-| Enregistrements KPI | 330 (5 établissements × 6 domaines × ~4 indicateurs × 3 semestres) |
+| Établissements | 6 (ENSTAB, IHEC, INSAT, ENIB, FSB, SUP'COM) |
+| Départements | 36 (6 par établissement) |
+| Utilisateurs | 43 (1 super admin + 1 président + 6 départements × 6 établissements) |
+| Enregistrements KPI | 396 (6 établissements × 6 domaines × ~4 indicateurs × 3 semestres) |
 | Règles d'alerte | 4 (abandon critique, réussite faible, budget, absentéisme) |
-| Alertes déclenchées | ~3 (1 critique IHEC, 1 avertissement ENIB, 1 info SUP'COM) |
+| Alertes déclenchées | ~4 (1 critique ENSTAB, 1 avertissement ENIB, 1 info, 1 avertissement budget) |
 
 **Scénarios de démonstration intégrés :**
 
-- 🔴 **IHEC** : taux d'abandon passe de 7% → 8% → **22%** (anomalie Z-score + alerte critique)
+- 🔴 **ENSTAB** : taux d'abandon passe de 7% → 8% → **22%** (anomalie Z-score + alerte critique)
 - 🟡 **ENIB** : taux d'exécution budgétaire à **97.7%** (risque dépassement budgétaire)
 - 📈 **INSAT** : meilleur établissement toutes catégories, 90%+ réussite (benchmark de référence)
+- 🏦 **IHEC** : bon niveau général, légère baisse des conventions internationales (-6 pts sur 3 semestres)
 - 📊 **FSB** : grande faculté stable, forte activité recherche (72+ publications)
 - 📉 **SUP'COM** : profil en amélioration progressive sur 3 semestres (tendance positive)
 

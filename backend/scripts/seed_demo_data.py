@@ -1,10 +1,11 @@
 """
-Seed script — 5 real Université de Carthage institutions, 3 semesters of KPI data.
+Seed script — 6 real Université de Carthage institutions, 3 semesters of KPI data.
 Demo scenarios:
-  IHEC    → dropout spike 7% → 8% → 22%  (anomalie critique)
+  ENSTAB  → dropout spike 7% → 8% → 22%  (anomalie critique)
+  IHEC    → bon niveau, légère baisse insertion internationale
   INSAT   → top performer toutes catégories
   ENIB    → risque de dépassement budgétaire
-  FSB     → profil stable
+  FSB     → profil stable, forte recherche
   SUP'COM → profil en amélioration progressive
 
 Run: python -m scripts.seed_demo_data
@@ -58,6 +59,12 @@ def _clear_data():
 
 def _seed_institutions() -> list[Institution]:
     data = [
+        {
+            "name": "École Nationale des Sciences et Technologies Avancées de Borj Cédria",
+            "acronym": "ENSTAB",
+            "type": "École Nationale",
+            "city": "Borj Cédria",
+        },
         {
             "name": "Institut des Hautes Études Commerciales de Carthage",
             "acronym": "IHEC",
@@ -198,16 +205,59 @@ def _kpi(institution_id, domain, key, value, unit, period_idx):
 
 def _seed_kpis(institutions: list[Institution]):
     records = []
-    ihec, insat, enib, fsb, supcom = institutions
+    enstab, ihec, insat, enib, fsb, supcom = institutions
 
-    # ─── IHEC Carthage ─── scénario : dropout_rate spike 7% → 8% → 22% (anomalie + alerte)
-    # École de commerce, ~3 000 étudiants
+    # ─── ENSTAB ─── scénario : dropout_rate spike 7% → 8% → 22% (anomalie + alerte critique)
+    # École technologique de Borj Cédria, ~1 200 étudiants
     for i, (sr, att, rep, drop) in enumerate([(82, 91, 9, 7), (84, 90, 8, 8), (78, 87, 11, 22)]):
         records += [
-            _kpi(ihec.id, "academic", "success_rate",     sr,   "%",    i),
-            _kpi(ihec.id, "academic", "attendance_rate",  att,  "%",    i),
-            _kpi(ihec.id, "academic", "repetition_rate",  rep,  "%",    i),
-            _kpi(ihec.id, "academic", "dropout_rate",     drop, "%",    i),
+            _kpi(enstab.id, "academic", "success_rate",     sr,   "%", i),
+            _kpi(enstab.id, "academic", "attendance_rate",  att,  "%", i),
+            _kpi(enstab.id, "academic", "repetition_rate",  rep,  "%", i),
+            _kpi(enstab.id, "academic", "dropout_rate",     drop, "%", i),
+        ]
+    for i, (alloc, cons) in enumerate([(2_800_000, 2_450_000), (2_800_000, 2_600_000), (2_800_000, 2_710_000)]):
+        records += [
+            _kpi(enstab.id, "finance", "budget_allocated",      alloc,                  "TND", i),
+            _kpi(enstab.id, "finance", "budget_consumed",       cons,                   "TND", i),
+            _kpi(enstab.id, "finance", "budget_execution_rate", round(cons/alloc*100,1), "%",  i),
+            _kpi(enstab.id, "finance", "cost_per_student",      round(cons/1200, 1),    "TND", i),
+        ]
+    for i, (teach, admin, abs_, train) in enumerate([(120, 45, 4.2, 320), (120, 45, 3.8, 340), (122, 46, 5.1, 290)]):
+        records += [
+            _kpi(enstab.id, "hr", "teaching_headcount", teach, "pers.", i),
+            _kpi(enstab.id, "hr", "admin_headcount",    admin, "pers.", i),
+            _kpi(enstab.id, "hr", "absenteeism_rate",   abs_,  "%",    i),
+            _kpi(enstab.id, "hr", "training_hours",     train, "h",    i),
+        ]
+    for i, (emp, nat, intl, delay) in enumerate([(72, 65, 18, 5.2), (74, 66, 20, 5.0), (71, 64, 19, 5.4)]):
+        records += [
+            _kpi(enstab.id, "insertion", "employability_rate",             emp,   "%",   i),
+            _kpi(enstab.id, "insertion", "national_convention_rate",       nat,   "%",   i),
+            _kpi(enstab.id, "insertion", "international_convention_rate",  intl,  "%",   i),
+            _kpi(enstab.id, "insertion", "insertion_delay_months",         delay, "mois",i),
+        ]
+    for i, (kwh, co2, rec) in enumerate([(485_000, 142, 28), (472_000, 138, 31), (491_000, 144, 30)]):
+        records += [
+            _kpi(enstab.id, "esg", "energy_consumption_kwh", kwh, "kWh",  i),
+            _kpi(enstab.id, "esg", "carbon_footprint_ton",   co2, "t CO₂",i),
+            _kpi(enstab.id, "esg", "recycling_rate",         rec, "%",    i),
+        ]
+    for i, (pub, proj, fund) in enumerate([(38, 12, 420_000), (41, 13, 450_000), (39, 14, 480_000)]):
+        records += [
+            _kpi(enstab.id, "research", "publications_count", pub,  "pub.",   i),
+            _kpi(enstab.id, "research", "active_projects",    proj, "projets",i),
+            _kpi(enstab.id, "research", "funding_tnd",        fund, "TND",    i),
+        ]
+
+    # ─── IHEC Carthage ─── scénario : bon niveau général, légère baisse insertion internationale
+    # École de commerce, ~3 000 étudiants
+    for i, (sr, att, rep, drop) in enumerate([(85, 92, 7, 6), (86, 92, 7, 6), (84, 91, 8, 7)]):
+        records += [
+            _kpi(ihec.id, "academic", "success_rate",     sr,   "%", i),
+            _kpi(ihec.id, "academic", "attendance_rate",  att,  "%", i),
+            _kpi(ihec.id, "academic", "repetition_rate",  rep,  "%", i),
+            _kpi(ihec.id, "academic", "dropout_rate",     drop, "%", i),
         ]
     for i, (alloc, cons) in enumerate([(3_500_000, 3_050_000), (3_500_000, 3_200_000), (3_500_000, 3_290_000)]):
         records += [
@@ -216,21 +266,22 @@ def _seed_kpis(institutions: list[Institution]):
             _kpi(ihec.id, "finance", "budget_execution_rate", round(cons/alloc*100,1), "%",  i),
             _kpi(ihec.id, "finance", "cost_per_student",      round(cons/3000, 1),    "TND", i),
         ]
-    for i, (teach, admin, abs_, train) in enumerate([(180, 60, 4.2, 320), (180, 60, 3.8, 340), (182, 62, 5.1, 290)]):
+    for i, (teach, admin, abs_, train) in enumerate([(180, 60, 3.5, 360), (181, 61, 3.4, 370), (182, 62, 3.6, 355)]):
         records += [
             _kpi(ihec.id, "hr", "teaching_headcount", teach, "pers.", i),
             _kpi(ihec.id, "hr", "admin_headcount",    admin, "pers.", i),
             _kpi(ihec.id, "hr", "absenteeism_rate",   abs_,  "%",    i),
             _kpi(ihec.id, "hr", "training_hours",     train, "h",    i),
         ]
-    for i, (emp, nat, intl, delay) in enumerate([(78, 70, 22, 4.8), (80, 72, 24, 4.5), (77, 69, 23, 5.0)]):
+    # Légère baisse des conventions internationales sur les 3 semestres
+    for i, (emp, nat, intl, delay) in enumerate([(82, 75, 30, 4.2), (81, 74, 27, 4.4), (80, 73, 24, 4.6)]):
         records += [
-            _kpi(ihec.id, "insertion", "employability_rate",              emp,   "%",   i),
-            _kpi(ihec.id, "insertion", "national_convention_rate",        nat,   "%",   i),
-            _kpi(ihec.id, "insertion", "international_convention_rate",   intl,  "%",   i),
-            _kpi(ihec.id, "insertion", "insertion_delay_months",          delay, "mois",i),
+            _kpi(ihec.id, "insertion", "employability_rate",             emp,   "%",   i),
+            _kpi(ihec.id, "insertion", "national_convention_rate",       nat,   "%",   i),
+            _kpi(ihec.id, "insertion", "international_convention_rate",  intl,  "%",   i),
+            _kpi(ihec.id, "insertion", "insertion_delay_months",         delay, "mois",i),
         ]
-    for i, (kwh, co2, rec) in enumerate([(420_000, 123, 30), (415_000, 121, 33), (425_000, 124, 31)]):
+    for i, (kwh, co2, rec) in enumerate([(420_000, 123, 32), (415_000, 121, 34), (418_000, 122, 33)]):
         records += [
             _kpi(ihec.id, "esg", "energy_consumption_kwh", kwh, "kWh",  i),
             _kpi(ihec.id, "esg", "carbon_footprint_ton",   co2, "t CO₂",i),
