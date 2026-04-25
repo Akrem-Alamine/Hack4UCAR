@@ -1,12 +1,12 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from app.core.database import get_db
 from app.models.user import User
+from app.models.alert import Alert, AlertRule
 from app.schemas.alert import AlertRuleCreate, AlertRuleResponse, AlertResponse
 from app.dependencies.auth import get_current_user, get_scoped_institution_id
 from app.services.alert_service import get_alerts, acknowledge_alert, run_alert_check
-from app.models.alert import AlertRule
 
 router = APIRouter(prefix="/alerts", tags=["Alertes"])
 
@@ -28,9 +28,15 @@ def ack_alert(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    alert = acknowledge_alert(db, alert_id, current_user.id)
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
-        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Alerte introuvable")
+
+    if current_user.role.value != "super_admin" and alert.institution_id != current_user.institution_id:
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
+
+    result = acknowledge_alert(db, alert_id, current_user.id)
+    if not result:
         raise HTTPException(status_code=404, detail="Alerte introuvable")
     return {"message": "Alerte acquittée avec succès", "alert_id": alert_id}
 
@@ -63,7 +69,13 @@ def create_rule(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    rule = AlertRule(**payload.model_dump())
+    scoped_id = get_scoped_institution_id(payload.institution_id, current_user)
+    if current_user.role.value != "super_admin" and not scoped_id:
+        raise HTTPException(status_code=403, detail="Accès non autorisé à cet établissement")
+
+    data = payload.model_dump()
+    data["institution_id"] = scoped_id
+    rule = AlertRule(**data)
     db.add(rule)
     db.commit()
     db.refresh(rule)

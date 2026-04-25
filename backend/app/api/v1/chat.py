@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from app.core.database import get_db
+from app.core.limiter import limiter
 from app.models.user import User
 from app.dependencies.auth import get_current_user, get_scoped_institution_id
 from app.services.kpi_service import get_latest_kpis
@@ -13,13 +14,15 @@ router = APIRouter(prefix="/chat", tags=["Chatbot IA"])
 
 
 class ChatRequest(BaseModel):
-    question: str
+    question: str = Field(min_length=1, max_length=2000)
     institution_id: Optional[int] = None
     stream: bool = False
 
 
 @router.post("/")
+@limiter.limit("30/minute")
 def chat(
+    request: Request,
     payload: ChatRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

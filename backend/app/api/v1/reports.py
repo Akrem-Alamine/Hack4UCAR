@@ -1,5 +1,5 @@
 import os
-from fastapi import APIRouter, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -33,8 +33,12 @@ def request_report(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    scoped_id = get_scoped_institution_id(payload.institution_id, current_user)
+    if not scoped_id:
+        raise HTTPException(status_code=403, detail="Accès non autorisé à cet établissement")
+
     report = Report(
-        institution_id=payload.institution_id,
+        institution_id=scoped_id,
         type=payload.type,
         period_label=payload.period_label,
         format=payload.format,
@@ -66,13 +70,14 @@ def download_report(
 ):
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Rapport introuvable")
+
+    if current_user.role.value != "super_admin" and report.institution_id != current_user.institution_id:
+        raise HTTPException(status_code=403, detail="Accès non autorisé à ce rapport")
+
     if report.status != ReportStatus.ready or not report.file_path:
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Rapport non prêt")
     if not os.path.exists(report.file_path):
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Fichier introuvable sur le serveur")
 
     media_type = "application/pdf" if report.format == ReportFormat.pdf else \

@@ -61,7 +61,7 @@ export default function ReportsPage() {
 
   const download = (reportId: number) => {
     const token = localStorage.getItem("access_token");
-    const url = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/reports/${reportId}/download`;
+    const url = `${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/v1/reports/${reportId}/download`;
     const a = document.createElement("a");
     a.href = url;
     a.click();

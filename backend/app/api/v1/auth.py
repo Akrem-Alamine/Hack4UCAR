@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import verify_password, create_access_token
+from app.core.limiter import limiter
 from app.models.user import User
 from app.schemas.auth import LoginRequest, TokenResponse, UserInfo
 from app.dependencies.auth import get_current_user
@@ -10,7 +11,8 @@ router = APIRouter(prefix="/auth", tags=["Authentification"])
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("20/minute")
+def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email, User.is_active == True).first()
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(

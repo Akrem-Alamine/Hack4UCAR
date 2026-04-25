@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     UPLOADS_DIR: str = "./uploads"
 
     CORS_ORIGINS: str = "http://localhost:3000,https://localhost:3000"
+    DEBUG: bool = False
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -27,7 +28,11 @@ class Settings(BaseSettings):
         return v
 
     def get_cors_origins(self) -> List[str]:
-        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+        origins = [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+        # "*" means allow all — expand to a sentinel list CORSMiddleware understands
+        if "*" in origins:
+            return ["*"]
+        return origins
 
     class Config:
         env_file = ".env"

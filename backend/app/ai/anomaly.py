@@ -1,19 +1,24 @@
 import numpy as np
 
 
-def detect_anomaly(historical_values: list[float], current_value: float, threshold: float = 2.0) -> dict:
-    if len(historical_values) < 3:
-        return {"is_anomaly": False, "z_score": 0.0, "direction": None}
+def detect_anomaly(historical_values: list[float], current_value: float, threshold: float = 3.0) -> dict:
+    # Need at least 2 prior data points to compute a meaningful deviation
+    if len(historical_values) < 2:
+        return {"is_anomaly": False, "z_score": None, "direction": None}
 
     arr = np.array(historical_values)
     mean = float(np.mean(arr))
     std = float(np.std(arr))
 
     if std < 1e-9:
-        return {"is_anomaly": False, "z_score": 0.0, "direction": None}
+        return {"is_anomaly": False, "z_score": None, "direction": None}
 
     z_score = (current_value - mean) / std
-    is_anomaly = abs(z_score) > threshold
+
+    # Require both a high Z-score AND a meaningful absolute deviation
+    # (avoids false positives when std is tiny due to sparse history)
+    abs_deviation_pct = abs(current_value - mean) / (abs(mean) + 1e-9) * 100
+    is_anomaly = abs(z_score) > threshold and abs_deviation_pct >= 15.0
 
     return {
         "is_anomaly": is_anomaly,

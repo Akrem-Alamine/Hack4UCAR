@@ -1,13 +1,14 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Bell, FileText, MessageSquare, LogOut, Building2 } from "lucide-react";
+import { LayoutDashboard, Bell, FileText, MessageSquare, LogOut, Building2, Upload } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
+  { href: "/ingestion", label: "Import de données", icon: Upload },
   { href: "/alerts", label: "Alertes", icon: Bell },
   { href: "/reports", label: "Rapports", icon: FileText },
   { href: "/chat", label: "Assistant IA", icon: MessageSquare },

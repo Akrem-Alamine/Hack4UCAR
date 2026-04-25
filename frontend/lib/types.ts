@@ -92,6 +92,59 @@ export const DOMAIN_LABELS: Record<string, string> = {
   student_life: "Vie Estudiantine",
 };
 
+// ─── Track 1: Ingestion Jobs ───────────────────────────────────────────────
+export type JobStatus = "pending" | "processing" | "completed" | "failed";
+export type JobSourceType = "pdf" | "image" | "excel" | "csv";
+
+export interface IngestionJob {
+  id: number;
+  institution_id: number;
+  source_type: JobSourceType;
+  original_filename: string;
+  status: JobStatus;
+  kpi_count: number;
+  quality_score: number;
+  imported_count: number;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+  extracted_kpis: ExtractedKPI[];
+}
+
+export interface ExtractedKPI {
+  domain: string;
+  indicator_key: string;
+  value: number;
+  unit: string;
+  period_label: string;
+  confidence: number;
+}
+
+// ─── Track 2: Ranking & Health ─────────────────────────────────────────────
+export interface InstitutionRanking {
+  rank: number;
+  institution_id: number;
+  institution_name: string;
+  institution_acronym: string;
+  city: string;
+  overall_score: number;
+  domain_scores: Record<string, number>;
+  risk_level: "low" | "medium" | "high";
+  risk_label: string;
+  kpi_count: number;
+}
+
+export interface InstitutionHealth {
+  institution_id: number;
+  institution_name?: string;
+  institution_acronym?: string;
+  overall_score: number;
+  domain_scores: Record<string, number>;
+  risk_level: "low" | "medium" | "high";
+  risk_label: string;
+  kpi_count: number;
+}
+
 export const INDICATOR_LABELS: Record<string, string> = {
   success_rate: "Taux de réussite",
   attendance_rate: "Taux de présence",

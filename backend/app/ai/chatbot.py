@@ -63,7 +63,7 @@ def query_chatbot(question: str, context: str) -> str:
             {"role": "user", "content": question},
         ],
         temperature=0.7,
-        max_completion_tokens=1024,
+        max_tokens=1024,
         top_p=1,
         stream=False,
     )
@@ -80,7 +80,7 @@ def stream_chatbot(question: str, context: str):
             {"role": "user", "content": question},
         ],
         temperature=0.7,
-        max_completion_tokens=1024,
+        max_tokens=1024,
         top_p=1,
         stream=True,
     )
@@ -109,7 +109,7 @@ Le résumé doit:
         model=settings.GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.6,
-        max_completion_tokens=2048,
+        max_tokens=2048,
         stream=False,
     )
     return completion.choices[0].message.content

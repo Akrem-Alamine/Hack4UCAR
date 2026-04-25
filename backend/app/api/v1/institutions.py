@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.institution import Institution
@@ -45,8 +45,9 @@ def get_institution(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if current_user.role.value != "super_admin" and current_user.institution_id != institution_id:
+        raise HTTPException(status_code=403, detail="Accès non autorisé à cet établissement")
     inst = db.query(Institution).filter(Institution.id == institution_id).first()
     if not inst:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Établissement introuvable")
     return inst

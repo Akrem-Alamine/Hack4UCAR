@@ -10,6 +10,16 @@ from app.models.institution import Institution
 from app.ai.chatbot import generate_report_narrative
 
 
+_FORMULA_INJECTION_CHARS = frozenset("=+-@\t\r")
+
+
+def _xlsx_safe(value):
+    """Prevent CSV/Excel formula injection by neutralising formula-starting characters."""
+    if isinstance(value, str) and value and value[0] in _FORMULA_INJECTION_CHARS:
+        return " " + value
+    return value
+
+
 DOMAIN_LABELS = {
     "academic": "Académique",
     "finance": "Finance",
@@ -131,7 +141,7 @@ def generate_pdf_report(db: Session, report: Report) -> str:
 
         table_data = [["Indicateur", "Valeur", "Unité"]]
         for row in rows:
-            table_data.append([row["indicator_label"], str(row["value"]), row["unit"]])
+            table_data.append([_xlsx_safe(row["indicator_label"]), str(row["value"]), _xlsx_safe(row["unit"])])
 
         t = Table(table_data, colWidths=[10*cm, 4*cm, 3*cm])
         t.setStyle(TableStyle([
@@ -198,7 +208,7 @@ def generate_excel_report(db: Session, report: Report) -> str:
         cell.alignment = center
 
     for i, row in enumerate(kpi_rows, start=5):
-        ws.append([row["indicator_label"], row["value"], row["unit"]])
+        ws.append([_xlsx_safe(row["indicator_label"]), row["value"], _xlsx_safe(row["unit"])])
         if i % 2 == 0:
             for cell in ws[i]:
                 cell.fill = PatternFill("solid", fgColor=LIGHT)
@@ -215,7 +225,7 @@ def generate_excel_report(db: Session, report: Report) -> str:
             cell.fill = header_fill
             cell.alignment = center
         for row in rows:
-            sheet.append([row["indicator_label"], row["value"], row["unit"]])
+            sheet.append([_xlsx_safe(row["indicator_label"]), row["value"], _xlsx_safe(row["unit"])])
         sheet.column_dimensions["A"].width = 35
         sheet.column_dimensions["B"].width = 15
         sheet.column_dimensions["C"].width = 12
