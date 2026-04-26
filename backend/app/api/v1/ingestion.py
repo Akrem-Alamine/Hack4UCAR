@@ -38,6 +38,26 @@ DOMAIN_ALIASES = {
 
 UNSTRUCTURED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".gif", ".webp"}
 
+# Only these canonical keys are ever saved to the database.
+# Any indicator_key (from AI extraction or Excel import) that doesn't resolve to one of
+# these after normalization is silently rejected — prevents garbage records.
+CANONICAL_KEYS: frozenset[str] = frozenset({
+    # Academic
+    "success_rate", "attendance_rate", "dropout_rate", "repetition_rate", "enrolled_students",
+    # Finance
+    "budget_allocated", "budget_consumed", "budget_execution_rate", "cost_per_student",
+    # HR
+    "teaching_headcount", "admin_headcount", "total_staff", "absenteeism_rate", "training_hours",
+    # ESG
+    "energy_consumption_kwh", "carbon_footprint_ton", "recycling_rate",
+    # Insertion
+    "employability_rate", "national_convention_rate", "international_convention_rate", "insertion_delay_months",
+    # Research
+    "publications_count", "active_projects", "funding_tnd",
+    # Infrastructure
+    "equipment_count", "classroom_occupancy_rate",
+})
+
 # Keyword patterns for indicator key normalization — order matters (first match wins)
 # Each tuple: (regex pattern to search in normalized key, canonical key)
 _INDICATOR_PATTERNS = [
@@ -306,6 +326,10 @@ async def upload_kpi_file(
             current_user.domain_scope if current_user.domain_scope else str(row.get("domain", ""))
         )
         indicator_key = _normalize_indicator_key(str(row.get("indicator_key", "")))
+        if indicator_key not in CANONICAL_KEYS:
+            errors.append({"row": row_num, "error": f"Indicateur non reconnu : '{indicator_key}'"})
+            continue
+
         unit = str(row.get("unit", "")).strip()
         period_label = period_label_override or str(row.get("period_label", "")).strip()
         notes = str(row.get("notes", "")).strip() if "notes" in df.columns else None
@@ -490,6 +514,9 @@ def _process_document_job(job_id: int, file_bytes: bytes, filename: str):
                     period_label = "Document importé"
 
                 norm_key = _normalize_indicator_key(kpi["indicator_key"])
+                if norm_key not in CANONICAL_KEYS:
+                    continue  # reject unknown indicator keys — prevents garbage records
+
                 existing = db.query(KPIRecord).filter(
                     KPIRecord.institution_id == job.institution_id,
                     KPIRecord.indicator_key == norm_key,

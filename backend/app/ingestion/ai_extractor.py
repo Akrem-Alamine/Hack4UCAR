@@ -9,20 +9,32 @@ from app.core.config import settings
 
 client = Groq(api_key=settings.GROQ_API_KEY)
 
-EXTRACTION_PROMPT = """Tu es un expert en analyse de données universitaires. Analyse le texte suivant extrait d'un document institutionnel et extrais tous les indicateurs de performance (KPIs) que tu peux identifier.
+EXTRACTION_PROMPT = """Tu es un expert en analyse de données universitaires.
+Extrais UNIQUEMENT les indicateurs de performance (KPIs) explicitement chiffrés dans le texte suivant.
 
-Pour chaque KPI trouvé, retourne un objet JSON avec ces champs exacts:
-- domain: l'un des domaines suivants: academic, finance, hr, esg, insertion, research, infrastructure, partnerships, student_life
-- indicator_key: identifiant snake_case du KPI (ex: success_rate, dropout_rate, budget_execution_rate)
-- value: valeur numérique (nombre uniquement)
-- unit: unité (%, TND, nombre, kWh, mois, etc.)
-- period_label: période concernée si mentionnée (ex: "2024-2025 S1"), sinon "N/A"
-- confidence: score de confiance 0-1 sur l'extraction
+Indicateurs acceptés — utilise EXACTEMENT ces indicator_key:
+Académique : success_rate, attendance_rate, dropout_rate, repetition_rate, enrolled_students
+Finance    : budget_allocated, budget_consumed, budget_execution_rate, cost_per_student
+RH         : teaching_headcount, admin_headcount, total_staff, absenteeism_rate, training_hours
+ESG        : energy_consumption_kwh, carbon_footprint_ton, recycling_rate
+Insertion  : employability_rate, national_convention_rate, international_convention_rate, insertion_delay_months
+Recherche  : publications_count, active_projects, funding_tnd
+Infra      : equipment_count, classroom_occupancy_rate
 
-Retourne UNIQUEMENT un tableau JSON valide. Aucun texte avant ou après.
-Si aucun KPI n'est identifiable, retourne [].
+Règles STRICTES:
+- N'invente pas de KPIs. Extrais seulement ce qui est explicitement chiffré dans le texte.
+- Si le document est une liste de personnes/équipements sans agrégats, compte le TOTAL et retourne
+  un seul KPI (ex: 15 lignes d'employés → teaching_headcount ou total_staff avec value=15).
+- N'extrais JAMAIS un KPI par ligne individuelle (pas de emp1000, pas de "assistant admissions").
+- indicator_key doit être l'un de ceux listés ci-dessus, rien d'autre.
+- Si aucun KPI ne correspond, retourne [].
 
-Texte du document:
+Format JSON pour chaque KPI:
+{{"domain": "...", "indicator_key": "...", "value": 12.5, "unit": "%", "period_label": "2024-2025 S1", "confidence": 0.9}}
+
+Retourne UNIQUEMENT le tableau JSON. Aucun texte autour.
+
+Texte:
 {text}
 """
 

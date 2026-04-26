@@ -30,7 +30,7 @@ export default function ReportsPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ type: "global", period_label: "2024-2025 S1", format: "pdf" as ReportFormat });
+  const [form, setForm] = useState({ type: "global", period_label: "2024-2025 S1", format: "pdf" as ReportFormat, });
   const [generating, setGenerating] = useState(false);
 
   const fetchReports = async () => {
@@ -45,7 +45,17 @@ export default function ReportsPage() {
     }
   };
 
-  useEffect(() => { fetchReports(); }, [selectedInstitution]);
+  // Auto-poll every 3 s while any report is pending or generating
+  useEffect(() => {
+    fetchReports();
+  }, [selectedInstitution]);
+
+  useEffect(() => {
+    const hasPending = reports.some((r) => r.status === "pending" || r.status === "generating");
+    if (!hasPending) return;
+    const id = setTimeout(fetchReports, 3000);
+    return () => clearTimeout(id);
+  }, [reports]);
 
   const requestReport = async () => {
     if (!selectedInstitution) return;
@@ -53,18 +63,27 @@ export default function ReportsPage() {
     try {
       await api.post("/reports/", { ...form, institution_id: selectedInstitution });
       setShowForm(false);
-      setTimeout(fetchReports, 1500);
+      fetchReports();
     } finally {
       setGenerating(false);
     }
   };
 
-  const download = (reportId: number) => {
-    const token = localStorage.getItem("access_token");
-    const url = `${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/v1/reports/${reportId}/download`;
-    const a = document.createElement("a");
-    a.href = url;
-    a.click();
+  const download = async (reportId: number, format: ReportFormat, periodLabel: string) => {
+    try {
+      const res = await api.get(`/reports/${reportId}/download`, { responseType: "blob" });
+      const ext = format === "pdf" ? "pdf" : "xlsx";
+      const safePeriod = periodLabel.replace(/\s+/g, "_");
+      const filename = `rapport_${safePeriod}_${reportId}.${ext}`;
+      const url = URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Erreur lors du téléchargement du rapport.");
+    }
   };
 
   return (
@@ -100,7 +119,7 @@ export default function ReportsPage() {
         {showForm && selectedInstitution && (
           <div className="bg-white rounded-xl border border-gray-100 p-6">
             <h3 className="text-sm font-semibold text-gray-800 mb-4">Paramètres du rapport</h3>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">Type</label>
                 <select
@@ -123,17 +142,6 @@ export default function ReportsPage() {
                   {["2023-2024 S1", "2023-2024 S2", "2024-2025 S1"].map((p) => (
                     <option key={p} value={p}>{p}</option>
                   ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Format</label>
-                <select
-                  value={form.format}
-                  onChange={(e) => setForm((f) => ({ ...f, format: e.target.value as ReportFormat }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ucar-blue/20"
-                >
-                  <option value="pdf">PDF</option>
-                  <option value="excel">Excel</option>
                 </select>
               </div>
             </div>
@@ -184,7 +192,7 @@ export default function ReportsPage() {
                   </div>
                   {report.status === "ready" && (
                     <button
-                      onClick={() => download(report.id)}
+                      onClick={() => download(report.id, report.format, report.period_label)}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-ucar-blue border border-ucar-blue/20 rounded-lg hover:bg-ucar-blue/5 transition-colors"
                     >
                       <Download size={12} />

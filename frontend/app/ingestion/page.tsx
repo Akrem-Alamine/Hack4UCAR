@@ -316,10 +316,11 @@ export default function IngestionPage() {
                       {status.label}
                     </div>
 
-                    {job.status === "completed" && (
+                    {(job.status === "completed" || job.status === "failed") && (
                       <button
                         onClick={() => openJob(job)}
                         className="p-2 text-gray-400 hover:text-ucar-blue hover:bg-gray-50 rounded-lg transition-colors"
+                        title="Voir les détails"
                       >
                         <Eye size={15} />
                       </button>
@@ -415,7 +416,7 @@ export default function IngestionPage() {
               <button onClick={() => setSelectedJob(null)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-5">
               {selectedJob.extracted_kpis?.length > 0 ? (
                 <>
                   <p className="text-sm font-semibold text-gray-700">KPIs extraits par l'IA :</p>
@@ -444,7 +445,23 @@ export default function IngestionPage() {
                   </div>
                 </>
               ) : (
-                <p className="text-sm text-gray-500">Aucun KPI extrait.</p>
+                <div className="bg-amber-50 border border-amber-100 rounded-lg p-4">
+                  <p className="text-sm font-semibold text-amber-700 mb-1">Aucun KPI extrait</p>
+                  <p className="text-xs text-amber-600">
+                    Le document ne contient pas de données chiffrées reconnues comme indicateurs de performance.
+                    Vérifiez le texte extrait ci-dessous pour comprendre ce qui a été lu.
+                  </p>
+                </div>
+              )}
+
+              {/* Raw extracted text */}
+              {selectedJob.extracted_text && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-2">Texte extrait par OCR / lecture PDF :</p>
+                  <pre className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3 max-h-48 overflow-y-auto whitespace-pre-wrap font-mono border border-gray-100">
+                    {selectedJob.extracted_text}
+                  </pre>
+                </div>
               )}
             </div>
           </div>

@@ -90,7 +90,8 @@ def generate_pdf_report(db: Session, report: Report) -> str:
     from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
     os.makedirs(settings.REPORTS_DIR, exist_ok=True)
-    filename = f"report_{report.institution_id}_{report.period_label}_{report.id}.pdf"
+    safe_period = report.period_label.replace(" ", "_")
+    filename = f"report_{report.institution_id}_{safe_period}_{report.id}.pdf"
     filepath = os.path.join(settings.REPORTS_DIR, filename)
 
     institution = db.query(Institution).filter(Institution.id == report.institution_id).first()
@@ -168,7 +169,8 @@ def generate_excel_report(db: Session, report: Report) -> str:
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
     os.makedirs(settings.REPORTS_DIR, exist_ok=True)
-    filename = f"report_{report.institution_id}_{report.period_label}_{report.id}.xlsx"
+    safe_period = report.period_label.replace(" ", "_")
+    filename = f"report_{report.institution_id}_{safe_period}_{report.id}.xlsx"
     filepath = os.path.join(settings.REPORTS_DIR, filename)
 
     institution = db.query(Institution).filter(Institution.id == report.institution_id).first()
