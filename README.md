@@ -111,6 +111,7 @@ Une plateforme unique qui :
 | Vue consolidée groupée | En mode "tous établissements", les KPIs sont regroupés par institution avec badge anomalies |
 | Alertes intelligentes | Seuils configurables, niveaux Info / Warning / Critical |
 | Explorateur de base de données | Interface SGBD intégrée (super admin uniquement) : navigation, tri, recherche, pagination, détail enregistrement |
+| Provisionnement d'établissement | Super admin crée un établissement en un formulaire → 6 départements + 1 président + 6 comptes département créés automatiquement avec un mot de passe temporaire affiché une seule fois |
 | Sélecteur d'institution | Changement de contexte sans rechargement |
 | Accès public via tunnel | Cloudflare Tunnel → accessible depuis n'importe quel appareil |
 | API versionnée | `/api/v1/` avec documentation Swagger intégrée |
@@ -244,7 +245,20 @@ Une plateforme unique qui :
 - Interface de suivi avec statut en temps réel + texte OCR brut consultable
 - Seuls les KPIs avec confiance ≥ 50% sont importés automatiquement
 
-### 7. Explorateur de base de données (SGBD intégré)
+### 7. Gestion des établissements — provisionnement automatique
+
+Accessible via **Établissements** dans la barre de navigation (super admin uniquement).
+
+- **Liste des institutions** : grille de toutes les institutions actives (nom, sigle, type, ville)
+- **Formulaire de création** : 4 champs seulement — Nom complet, Sigle, Ville, Type d'établissement
+- **Provisionnement automatique en un clic** :
+  - 6 départements créés (Académique, Finance, RH, Insertion Professionnelle, ESG, Recherche)
+  - 1 compte Président (`president@<sigle>.tn`)
+  - 6 comptes département (`academique@`, `finance@`, `rh@`, `insertion@`, `esg@`, `recherche@`)
+  - Un mot de passe temporaire aléatoire généré et affiché **une seule fois** avec bouton de copie
+- **Sécurité** : 409 si le sigle est déjà utilisé, accès super admin uniquement (HTTP 403 sinon)
+
+### 8. Explorateur de base de données (SGBD intégré)
 
 Accessible via **Base de données** dans la barre de navigation (super admin uniquement).
 
@@ -453,7 +467,7 @@ Hack4UCAR/
 │   ├── app/
 │   │   ├── api/v1/
 │   │   │   ├── auth.py             # Login (rate limited), JWT, /me
-│   │   │   ├── institutions.py     # CRUD établissements (IDOR protégé)
+│   │   │   ├── institutions.py     # CRUD établissements + POST / provisionnement complet (IDOR protégé)
 │   │   │   ├── departments.py      # CRUD départements
 │   │   │   ├── kpis.py             # KPIs + tendances + classement + health + insights
 │   │   │   ├── alerts.py           # Alertes + règles (IDOR protégé)
@@ -497,10 +511,11 @@ Hack4UCAR/
 │   │   ├── reports/page.tsx        # Rapports PDF (auto-polling, téléchargement authentifié)
 │   │   ├── chat/page.tsx           # Chatbot IA (streaming SSE + rendu Markdown complet)
 │   │   ├── ingestion/page.tsx      # Import données (dry-run + modal avertissement + job tracker)
+│   │   ├── institutions/page.tsx   # Gestion établissements + provisionnement automatique (super admin)
 │   │   └── database/page.tsx       # Explorateur SGBD (tri, recherche, pagination, détail)
 │   ├── components/
 │   │   ├── layout/
-│   │   │   ├── Sidebar.tsx         # Navigation (Base de données en bas, avant profil)
+│   │   │   ├── Sidebar.tsx         # Navigation (Établissements + Base de données, super admin uniquement)
 │   │   │   └── DashboardLayout.tsx
 │   │   ├── dashboard/              # KPICard, KPIChart, ComparisonChart
 │   │   └── ui/
@@ -584,7 +599,7 @@ cloudflared tunnel --url http://localhost:80
 
 | Email | Accès |
 |---|---|
-| `super@ucar.tn` | Vue consolidée de tous les établissements + classement + comparaison + explorateur DB |
+| `super@ucar.tn` | Vue consolidée de tous les établissements + classement + comparaison + explorateur DB + gestion établissements |
 
 ### Par établissement
 
@@ -779,6 +794,21 @@ GET /api/v1/ingestion/jobs?institution_id=1
 GET /api/v1/ingestion/template
 ```
 
+### Établissements (super admin)
+
+```http
+GET  /api/v1/institutions/
+POST /api/v1/institutions/
+{
+  "name": "École Nationale des Sciences de Tunis",
+  "acronym": "ENST",
+  "type": "École Nationale",
+  "city": "Tunis"
+}
+# → crée l'institution + 6 départements + 1 président + 6 comptes département
+# → retourne { institution, password, accounts[] }
+```
+
 ### Explorateur base de données (super admin)
 
 ```http
@@ -849,8 +879,8 @@ Le script `seed_demo_data.py` génère des données réelles pour 6 établisseme
 |---|---|
 | **Impact** | Couvre les 4 tracks, 7 domaines KPI, 27 indicateurs, 30+ établissements, 14 processus institutionnels |
 | **Innovation** | IA au cœur : Z-score, régression linéaire, OCR, LLM streaming, ranking, health index, DB explorer |
-| **Utilisabilité** | Interface 100% française, accès par rôle, import Excel/PDF sans code, chatbot naturel avec Markdown |
-| **Scalabilité** | Architecture multi-tenant, Docker, API versionnée, Celery pour les jobs asynchrones |
+| **Utilisabilité** | Interface 100% française, accès par rôle, import Excel/PDF sans code, chatbot Markdown, provisionnement établissement en 1 clic |
+| **Scalabilité** | Architecture multi-tenant, Docker, API versionnée, Celery pour les jobs asynchrones, ajout d'établissement sans redéploiement |
 | **Faisabilité** | Import Excel (workflow existant), PDF export, données réalistes tunisiennes, upsert intelligent |
 | **Sécurité** | 15+ mesures de sécurité, défense en profondeur, rate limiting, IDOR protégé, allowlist stricte |
 
