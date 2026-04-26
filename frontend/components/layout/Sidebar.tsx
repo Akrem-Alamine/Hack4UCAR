@@ -57,26 +57,31 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="px-3 pb-2">
-        {(() => {
-          const href = "/database";
-          const active = pathname.startsWith(href);
-          return (
-            <Link
-              href={href}
-              className={clsx(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                active
-                  ? "bg-ucar-blue text-white"
-                  : "text-white/60 hover:bg-white/10 hover:text-white"
-              )}
-            >
-              <Database size={18} />
-              Base de données
-            </Link>
-          );
-        })()}
-      </div>
+      {user?.role === "super_admin" && (
+        <div className="px-3 pb-1 space-y-1">
+          {[
+            { href: "/institutions", label: "Établissements", icon: Building2 },
+            { href: "/database",     label: "Base de données", icon: Database },
+          ].map(({ href, label, icon: Icon }) => {
+            const active = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={clsx(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                  active
+                    ? "bg-ucar-blue text-white"
+                    : "text-white/60 hover:bg-white/10 hover:text-white"
+                )}
+              >
+                <Icon size={18} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
 
       <div className="px-3 py-4 border-t border-white/10">
         <div className="px-3 py-2 mb-2">
