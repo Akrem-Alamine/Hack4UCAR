@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Bell, FileText, MessageSquare, LogOut, Building2, Upload } from "lucide-react";
+import { LayoutDashboard, Bell, FileText, MessageSquare, LogOut, Building2, Upload, Database } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
@@ -56,6 +56,27 @@ export default function Sidebar() {
           );
         })}
       </nav>
+
+      <div className="px-3 pb-2">
+        {(() => {
+          const href = "/database";
+          const active = pathname.startsWith(href);
+          return (
+            <Link
+              href={href}
+              className={clsx(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                active
+                  ? "bg-ucar-blue text-white"
+                  : "text-white/60 hover:bg-white/10 hover:text-white"
+              )}
+            >
+              <Database size={18} />
+              Base de données
+            </Link>
+          );
+        })()}
+      </div>
 
       <div className="px-3 py-4 border-t border-white/10">
         <div className="px-3 py-2 mb-2">

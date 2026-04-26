@@ -174,6 +174,7 @@ def _ai_normalize_dataframe(df: "pd.DataFrame") -> "tuple[pd.DataFrame, bool]":
     cols = df.columns.tolist()
     sample = df.head(5).to_dict(orient="records")
 
+    canonical_keys_list = ", ".join(sorted(CANONICAL_KEYS))
     prompt = f"""Tu es un expert en normalisation de données universitaires.
 
 Voici un fichier Excel/CSV avec les colonnes suivantes:
@@ -187,7 +188,7 @@ Ta mission: mapper ces données vers le format standard suivant et retourner UN 
 Format standard requis pour chaque ligne:
 {{
   "domain": "academic|finance|hr|esg|insertion|research",
-  "indicator_key": "snake_case_key",
+  "indicator_key": "une_cle_de_la_liste_autorisee",
   "value": 12.5,
   "unit": "%|TND|nombre|kWh|mois",
   "period_label": "2024-2025 S1",
@@ -195,11 +196,16 @@ Format standard requis pour chaque ligne:
   "period_end": "2025-01-31"
 }}
 
-Règles:
+LISTE DES INDICATOR_KEY AUTORISÉES (utilise UNIQUEMENT ces valeurs exactes):
+{canonical_keys_list}
+
+Règles STRICTES:
+- indicator_key DOIT être l'une des clés de la liste autorisée ci-dessus. Aucune autre valeur n'est acceptée.
+- Si une ligne ne correspond à aucun indicateur de la liste, IGNORE cette ligne (ne la retourne pas).
 - Infère le domaine depuis le nom de l'indicateur si non précisé
 - Génère des dates cohérentes si absentes (utilise 2024-01-01 / 2024-12-31 par défaut)
 - Convertis les % implicites (ex: "82%" → value=82, unit="%")
-- indicator_key doit être en snake_case sans accents
+- Ne génère PAS de KPI par personne (ex: un par employé). Agrège en totaux.
 - Retourne UNIQUEMENT le tableau JSON, rien d'autre
 
 Traite TOUTES les lignes du fichier (pas seulement les 5 premières).
@@ -223,6 +229,9 @@ Données complètes:
         import pandas as pd
         normalized = pd.DataFrame(rows)
         normalized.columns = [c.strip().lower() for c in normalized.columns]
+        # Extra normalization pass on indicator_key in case AI returned near-misses
+        if "indicator_key" in normalized.columns:
+            normalized["indicator_key"] = normalized["indicator_key"].astype(str).apply(_normalize_indicator_key)
         return normalized, True
     except Exception:
         return df, False
@@ -509,13 +518,17 @@ def _process_document_job(job_id: int, file_bytes: bytes, filename: str):
             if kpi.get("confidence", 0) < 0.5:
                 continue
             try:
-                period_label = kpi.get("period_label", "Document importé")
-                if period_label == "N/A":
+                period_label = kpi.get("period_label") or "Document importé"
+                if not period_label or period_label.strip() in ("N/A", "n/a", "null", "None", ""):
                     period_label = "Document importé"
+
+                unit = kpi.get("unit") or "nombre"
+                if not unit or unit.strip() in ("null", "None", ""):
+                    unit = "nombre"
 
                 norm_key = _normalize_indicator_key(kpi["indicator_key"])
                 if norm_key not in CANONICAL_KEYS:
-                    continue  # reject unknown indicator keys — prevents garbage records
+                    continue
 
                 existing = db.query(KPIRecord).filter(
                     KPIRecord.institution_id == job.institution_id,
@@ -524,7 +537,7 @@ def _process_document_job(job_id: int, file_bytes: bytes, filename: str):
                 ).first()
                 if existing:
                     existing.value = float(kpi["value"])
-                    existing.unit = kpi.get("unit", "")
+                    existing.unit = unit
                     existing.domain = _normalize_domain(kpi["domain"])
                     existing.notes = f"Mis à jour depuis {filename}"
                 else:
@@ -534,14 +547,16 @@ def _process_document_job(job_id: int, file_bytes: bytes, filename: str):
                         domain=_normalize_domain(kpi["domain"]),
                         indicator_key=norm_key,
                         value=float(kpi["value"]),
-                        unit=kpi.get("unit", ""),
+                        unit=unit,
                         period_label=period_label,
                         period_start=today,
                         period_end=today,
                         notes=f"Extrait automatiquement depuis {filename}",
                     ))
+                db.flush()  # catch constraint errors per-KPI, not on bulk commit
                 imported += 1
             except Exception:
+                db.rollback()  # reset session so subsequent KPIs can still save
                 continue
 
         db.commit()
@@ -551,10 +566,14 @@ def _process_document_job(job_id: int, file_bytes: bytes, filename: str):
         db.commit()
 
     except Exception as e:
-        if job:
-            job.status = JobStatus.failed
-            job.error_message = str(e)[:500]
-            db.commit()
+        try:
+            db.rollback()  # ensure session is clean before updating job status
+            if job:
+                job.status = JobStatus.failed
+                job.error_message = str(e)[:500]
+                db.commit()
+        except Exception:
+            pass
     finally:
         db.close()
 

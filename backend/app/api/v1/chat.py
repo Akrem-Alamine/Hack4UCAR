@@ -42,7 +42,10 @@ def chat(
     if payload.stream:
         def event_stream():
             for chunk in stream_chatbot(payload.question, context):
-                yield f"data: {chunk}\n\n"
+                # Encode newlines so they don't break the SSE line framing.
+                # The frontend decodes \n back to real newlines before accumulating.
+                encoded = chunk.replace("\\", "\\\\").replace("\n", "\\n")
+                yield f"data: {encoded}\n\n"
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")

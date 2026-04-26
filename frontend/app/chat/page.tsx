@@ -115,7 +115,9 @@ export default function ChatPage() {
           if (line.startsWith("data: ")) {
             const chunk = line.slice(6);
             if (chunk === "[DONE]") break;
-            accumulated += chunk;
+            // Decode escaped newlines and backslashes sent by the backend
+            const decoded = chunk.replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
+            accumulated += decoded;
             setMessages((m) => {
               const updated = [...m];
               updated[updated.length - 1] = { role: "assistant", content: accumulated, streaming: true };

@@ -39,10 +39,11 @@ Une plateforme unique qui :
 - **Centralise** toutes les données institutionnelles en temps réel
 - **Détecte** automatiquement les anomalies par intelligence artificielle
 - **Prédit** les tendances futures (budget, abandon, employabilité…)
-- **Génère** des rapports PDF et Excel avec résumés narratifs IA
-- **Répond** aux questions en langage naturel via un chatbot streaming
+- **Génère** des rapports PDF avec résumés narratifs IA
+- **Répond** aux questions en langage naturel via un chatbot streaming avec rendu Markdown complet
 - **Sécurise** les accès par tenant, par rôle et par domaine
 - **Ingère** des données depuis des fichiers Excel, CSV, PDF et images
+- **Explore** la base de données en temps réel via une interface SGBD intégrée
 
 ---
 
@@ -53,11 +54,18 @@ Une plateforme unique qui :
 | Fonctionnalité | Détails |
 |---|---|
 | Import Excel / CSV standard | Colonnes standard avec validation ligne par ligne |
-| Normalisation IA automatique | Si les colonnes ne correspondent pas, Groq les mappe automatiquement |
+| Normalisation IA automatique | Si les colonnes ne correspondent pas, Groq les mappe vers le schéma standard — le prompt liste explicitement les 27 clés canoniques autorisées et demande à l'IA d'ignorer les lignes non mappables |
+| Mode dry-run avant import | Validation et aperçu sans sauvegarder — popup de confirmation si anomalies |
+| Upsert intelligent | Re-importer un fichier met à jour les valeurs existantes, jamais de doublons |
+| Normalisation des clés indicateur | Regex multilingue avec strip des accents : "Taux d'abandon étudiants" → `dropout_rate` automatiquement ; appliquée aussi après normalisation IA comme filet de sécurité |
+| Allowlist canonique | Seuls 27 indicateurs connus sont acceptés — toute clé non résolue (de l'IA ou du fichier) est rejetée avec message d'erreur par ligne |
 | Import PDF & images (OCR) | pdfplumber + pytesseract (`fra+ara+eng`) |
 | Extraction de KPIs depuis PDF | Groq identifie et structure les indicateurs depuis du texte libre |
+| Récupération automatique des jobs | Au redémarrage, les jobs bloqués en `processing` sont relancés automatiquement |
+| Historique des imports | Chaque import Excel/CSV/PDF/image crée un enregistrement traçable |
 | Validation de qualité IA | Score de confiance 0–100 par indicateur extrait |
 | File d'attente asynchrone | Jobs d'ingestion trackés en base (pending → processing → completed) |
+| Texte OCR visible | Le texte brut extrait est affiché dans le détail du job pour vérification |
 | Template téléchargeable | `GET /api/v1/ingestion/template` retourne le format attendu |
 | Validation des types de fichier | Extension + magic bytes (contenu binaire) vérifiés |
 | Limite de taille | Rejet automatique des fichiers > 50 Mo |
@@ -82,9 +90,13 @@ Une plateforme unique qui :
 |---|---|
 | Chatbot NLP en français | Groq LLM avec contexte KPI injecté dynamiquement |
 | Streaming temps réel (SSE) | Réponse mot par mot via Server-Sent Events |
+| Rendu Markdown complet | Tableaux, titres `#` à `####`, listes, gras, italique — rendu natif sans dépendance |
+| Encodage SSE correct | Les sauts de ligne dans les chunks sont encodés `\n` → pas de perte de contenu |
 | Arrêt du streaming | Bouton ✕ pour interrompre la réponse en cours |
 | Rapport PDF institutionnel | ReportLab avec mise en page UCAR + résumé exécutif IA |
-| Rapport Excel multi-feuilles | openpyxl avec un onglet par domaine KPI |
+| Format PDF uniquement | Les rapports sont toujours générés en PDF |
+| Téléchargement authentifié | Le téléchargement utilise le token Bearer (pas de lien nu) |
+| Auto-polling rapports | La page se rafraîchit automatiquement tant qu'un rapport est en cours de génération |
 | Narration automatique | Groq génère le résumé narratif de chaque rapport |
 | Insights par domaine | Analyse contextuelle `GET /api/v1/kpis/insights` |
 | Explications des anomalies | Groq explique chaque anomalie en langage naturel |
@@ -95,8 +107,10 @@ Une plateforme unique qui :
 |---|---|
 | Multi-tenancy | `institution_id` sur chaque table, isolation garantie côté serveur |
 | RBAC 4 niveaux | Super Admin → Président → Doyen → Staff département |
-| Tableau de bord consolidé | Vue globale UCAR + drill-down institution |
+| Tableau de bord consolidé | Vue globale UCAR groupée par établissement + drill-down institution |
+| Vue consolidée groupée | En mode "tous établissements", les KPIs sont regroupés par institution avec badge anomalies |
 | Alertes intelligentes | Seuils configurables, niveaux Info / Warning / Critical |
+| Explorateur de base de données | Interface SGBD intégrée (super admin uniquement) : navigation, tri, recherche, pagination, détail enregistrement |
 | Sélecteur d'institution | Changement de contexte sans rechargement |
 | Accès public via tunnel | Cloudflare Tunnel → accessible depuis n'importe quel appareil |
 | API versionnée | `/api/v1/` avec documentation Swagger intégrée |
@@ -126,8 +140,9 @@ Une plateforme unique qui :
 │  /api/v1/alerts             │   │  /reports                     │
 │  /api/v1/reports            │   │  /chat                        │
 │  /api/v1/chat               │   │  /ingestion                   │
-│  /api/v1/ingestion          │   └───────────────────────────────┘
-│  /api/v1/departments        │
+│  /api/v1/ingestion          │   │  /database  (SGBD explorer)   │
+│  /api/v1/departments        │   └───────────────────────────────┘
+│  /api/v1/db-explorer        │
 │  Celery Worker + Beat       │
 └────────┬───────────┬────────┘
          │           │
@@ -140,14 +155,14 @@ Une plateforme unique qui :
     │  Z-score → anomalies             │
     │  Régression linéaire → prévision │
     │  pdfplumber + pytesseract (OCR)  │
-    │  ReportLab + openpyxl (exports)  │
+    │  ReportLab (exports PDF)         │
     └───────────────────────────────────┘
 ```
 
 ### Multi-tenancy
 
 - Chaque établissement est un **tenant isolé** via `institution_id` sur chaque table
-- Les comptes **Super Admin UCAR** voient tous les établissements (vue consolidée)
+- Les comptes **Super Admin UCAR** voient tous les établissements (vue consolidée groupée)
 - Les **Présidents** voient toutes les données de leur établissement
 - Les comptes **département** sont strictement limités à leur domaine de données
 - Toute tentative d'accès cross-tenant est bloquée par le backend (HTTP 403)
@@ -159,6 +174,7 @@ Une plateforme unique qui :
 ### 1. Tableau de bord consolidé multi-établissements
 
 - Vue globale UCAR avec agrégation de tous les KPIs
+- **Mode "tous établissements"** : KPIs groupés par institution, chacun dans sa propre section avec badge d'anomalies
 - Sélecteur d'établissement pour drill-down institution par institution
 - Indice de santé composite (0–100) avec barre de progression par domaine
 - Classement inter-établissements avec médailles pour les 3 premiers
@@ -176,14 +192,14 @@ Une plateforme unique qui :
 - Workflow d'acquittement avec horodatage
 - Vérification manuelle via `POST /api/v1/alerts/check`
 
-### 3. Rapports automatiques (PDF & Excel)
+### 3. Rapports automatiques PDF
 
-- Génération à la demande par période, domaine et format
-- **PDF** : mise en page institutionnelle UCAR avec résumé exécutif généré par Groq
-- **Excel** : classeur multi-feuilles avec un onglet par domaine KPI
-- Téléchargement direct depuis l'interface
-- Génération en arrière-plan (non-bloquant) avec statut en temps réel
-- Rapports hebdomadaires et mensuels générés automatiquement
+- Génération à la demande par période et domaine (format PDF uniquement)
+- Mise en page institutionnelle UCAR avec résumé exécutif généré par Groq
+- Téléchargement authentifié via Bearer token (aucun lien public exposé)
+- Auto-polling : la page se rafraîchit toutes les 3 secondes pendant la génération
+- Génération en arrière-plan (non-bloquant)
+- Rapports hebdomadaires et mensuels générés automatiquement par Celery
 
 ### 4. Moteur d'analyse prédictive
 
@@ -193,30 +209,52 @@ Une plateforme unique qui :
 - Anomalie Z-score avec seuil combiné (Z > 3 ET déviation absolue > 15%)
 - Indice de santé institutionnel par domaine + score global
 
-### 5. Chatbot IA streaming
+### 5. Chatbot IA streaming avec Markdown complet
 
 - Questions en langage naturel (français)
 - Réponse en streaming temps réel (Server-Sent Events)
+- **Encodage correct des sauts de ligne SSE** : les `\n` dans les chunks sont encodés côté serveur et décodés côté client — les tableaux et titres arrivent intacts
+- **Rendu Markdown natif** sans dépendance externe :
+  - Titres `#`, `##`, `###`, `####`
+  - Tableaux avec entête bleue et lignes alternées
+  - Listes à puces et numérotées
+  - Texte en gras et italique
 - Contexte KPI injecté dynamiquement depuis la base de données
-- Rendu Markdown dans l'interface (gras, listes, titres)
 - Suggestions de questions pré-définies
 - Mode standard (non-streaming) disponible en bascule
 
-### 6. Pipeline d'ingestion de données (Track 1)
+### 6. Pipeline d'ingestion de données
 
 #### Fichiers structurés (Excel / CSV)
-- Normalisation automatique des noms de colonnes
-- Si les colonnes ne correspondent pas → Groq mappe automatiquement
-- Validation ligne par ligne avec rapport d'erreurs détaillé
-- Alias de domaine français reconnus (`académique`, `rh`, `recherche`…)
+
+- **Mode dry-run** : validation et aperçu avant sauvegarde — popup de confirmation si erreurs ou normalisation IA
+- **Upsert** : re-importer un fichier met à jour les valeurs, jamais de doublons
+- **Normalisation des clés** : regex multilingue avec strip des accents — "Taux de réussite global" → `success_rate`
+- **Allowlist stricte** : 27 clés canoniques autorisées, toute clé non reconnue est rejetée avec message d'erreur par ligne
+- Normalisation automatique des colonnes via Groq si le format ne correspond pas — le prompt inclut explicitement la liste des 27 clés canoniques, l'IA ne génère que des clés valides et ignore les lignes non mappables
+- Double filet de sécurité : normalisation regex appliquée après la sortie IA avant la vérification de l'allowlist
+- Historique de chaque import visible dans la page Ingestion
 
 #### Documents non structurés (PDF / Images)
-- OCR via pdfplumber (PDF natif) ou pytesseract (PDF scanné / images)
+
+- OCR via pdfplumber (PDF natif) ou pytesseract (PDF scanné / image)
 - Support multilingue : français + arabe + anglais
-- Extraction structurée des KPIs via Groq avec score de confiance
-- Validation qualité de l'extraction (score 0–100)
+- Extraction KPIs via Groq avec score de confiance — uniquement les clés canoniques sont sauvegardées
+- **Récupération automatique** : jobs bloqués au redémarrage relancés automatiquement
+- Interface de suivi avec statut en temps réel + texte OCR brut consultable
 - Seuls les KPIs avec confiance ≥ 50% sont importés automatiquement
-- Interface de suivi des jobs avec statut en temps réel
+
+### 7. Explorateur de base de données (SGBD intégré)
+
+Accessible via **Base de données** dans la barre de navigation (super admin uniquement).
+
+- **Liste des tables** avec nombre de lignes en temps réel (8 tables exposées)
+- **Grille de données** : 50 lignes par page, défilement horizontal, toutes les colonnes
+- **Tri par colonne** : clic sur l'entête pour trier, re-clic pour inverser (↑/↓)
+- **Recherche textuelle** : filtrage ILIKE sur toutes les colonnes texte
+- **Pagination** : navigateur de pages avec numéros
+- **Panneau de détail** : clic sur une ligne → panneau latéral avec toutes les valeurs complètes (non tronquées)
+- **Sécurité** : lecture seule, allowlist explicite des tables, accès super admin uniquement (HTTP 403 sinon)
 
 ---
 
@@ -246,6 +284,7 @@ La plateforme implémente une défense en profondeur couvrant les principales ca
 | Protection IDOR — `GET /ingestion/jobs/{id}` | 403 si le job n'appartient pas à l'institution de l'utilisateur |
 | Protection IDOR — `GET /reports/{id}/download` | 403 si le rapport n'appartient pas à l'institution de l'utilisateur |
 | Protection IDOR — `POST /alerts/{id}/acknowledge` | 403 si l'alerte n'appartient pas à l'institution de l'utilisateur |
+| Explorateur DB — `GET /db-explorer/*` | 403 pour tout rôle autre que `super_admin` |
 | Tenant check — `POST /reports/` | `institution_id` forcé au périmètre de l'utilisateur |
 | Tenant check — `POST /alerts/rules` | `institution_id` forcé au périmètre de l'utilisateur |
 | Tenant check — `POST /kpis/` | `institution_id` forcé au périmètre de l'utilisateur |
@@ -263,9 +302,9 @@ La plateforme implémente une défense en profondeur couvrant les principales ca
 
 | Mesure | Détail |
 |---|---|
-| ORM SQLAlchemy exclusif | Zéro requête SQL brute — toutes les requêtes via `.filter()` / `.query()` |
+| ORM SQLAlchemy exclusif | Zéro requête SQL brute dans le code applicatif |
 | Paramétrage automatique | SQLAlchemy envoie les valeurs comme paramètres liés à PostgreSQL |
-| Zéro f-string SQL | Aucune interpolation de chaîne dans les requêtes base de données |
+| Explorateur DB — requêtes paramétrées | `text()` avec `:param` liés, table validée contre allowlist avant exécution |
 
 ### Sécurité des fichiers uploadés
 
@@ -378,7 +417,6 @@ JWT_SECRET_KEY=<output>
 | Technologie | Version | Usage |
 |---|---|---|
 | **ReportLab** | 4.1 | Génération PDF avec mise en page institutionnelle UCAR |
-| **openpyxl** | 3.1 | Génération Excel multi-feuilles avec styles |
 
 ### Frontend
 
@@ -419,9 +457,10 @@ Hack4UCAR/
 │   │   │   ├── departments.py      # CRUD départements
 │   │   │   ├── kpis.py             # KPIs + tendances + classement + health + insights
 │   │   │   ├── alerts.py           # Alertes + règles (IDOR protégé)
-│   │   │   ├── reports.py          # PDF/Excel (IDOR protégé + tenant check)
-│   │   │   ├── chat.py             # Chatbot Groq streaming SSE (rate limited)
-│   │   │   └── ingestion.py        # Excel/CSV + PDF/OCR (magic bytes + size check)
+│   │   │   ├── reports.py          # PDF (IDOR protégé + tenant check)
+│   │   │   ├── chat.py             # Chatbot Groq streaming SSE (rate limited, newlines encodés)
+│   │   │   ├── ingestion.py        # Excel/CSV + PDF/OCR (upsert, allowlist, dry-run, récupération jobs)
+│   │   │   └── database_explorer.py# Explorateur SGBD lecture seule (super admin, allowlist tables)
 │   │   ├── ai/
 │   │   │   ├── anomaly.py          # Z-score + prévision linéaire
 │   │   │   ├── chatbot.py          # Intégration Groq API
@@ -435,47 +474,49 @@ Hack4UCAR/
 │   │   │   └── auth.py             # get_current_user, RBAC, scoping tenant
 │   │   ├── ingestion/
 │   │   │   ├── pdf_extractor.py    # pdfplumber + pytesseract OCR
-│   │   │   └── ai_extractor.py     # Groq KPI extraction + validation qualité
-│   │   ├── models/                 # SQLAlchemy models (institution, user, kpi, alert, report, ingestion_job)
-│   │   ├── schemas/                # Pydantic schemas avec validation (max_length, EmailStr)
+│   │   │   └── ai_extractor.py     # Groq KPI extraction + validation qualité (prompt strict)
+│   │   ├── models/                 # SQLAlchemy models
+│   │   ├── schemas/                # Pydantic schemas avec validation
 │   │   ├── services/
 │   │   │   ├── kpi_service.py      # Logique KPI, tendances, comparaison
 │   │   │   ├── alert_service.py    # Vérification des règles d'alerte
-│   │   │   ├── report_service.py   # Génération PDF/Excel (_xlsx_safe anti-injection)
+│   │   │   ├── report_service.py   # Génération PDF (_xlsx_safe anti-injection)
 │   │   │   └── ranking_service.py  # Indice de santé + classement institutions
-│   │   ├── main.py                 # FastAPI app + middlewares sécurité + rate limiter
+│   │   ├── main.py                 # FastAPI app + middlewares sécurité + récupération jobs au démarrage
 │   │   └── worker.py               # Celery tasks (alertes, rapports planifiés)
-│   ├── alembic/                    # Migrations DB (001→004)
+│   ├── alembic/                    # Migrations DB
 │   ├── scripts/
-│   │   └── seed_demo_data.py       # Données de démonstration (5 établissements)
+│   │   └── seed_demo_data.py       # Données de démonstration (6 établissements UCAR)
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── frontend/
 │   ├── app/
 │   │   ├── login/page.tsx          # Page de connexion
-│   │   ├── dashboard/page.tsx      # Tableau de bord KPI + health index + ranking
+│   │   ├── dashboard/page.tsx      # Tableau de bord KPI + health index + ranking (groupé par institution)
 │   │   ├── alerts/page.tsx         # Gestion des alertes
-│   │   ├── reports/page.tsx        # Rapports PDF/Excel
-│   │   ├── chat/page.tsx           # Chatbot IA (streaming SSE + markdown)
-│   │   └── ingestion/page.tsx      # Import données (drag-and-drop + job tracker)
+│   │   ├── reports/page.tsx        # Rapports PDF (auto-polling, téléchargement authentifié)
+│   │   ├── chat/page.tsx           # Chatbot IA (streaming SSE + rendu Markdown complet)
+│   │   ├── ingestion/page.tsx      # Import données (dry-run + modal avertissement + job tracker)
+│   │   └── database/page.tsx       # Explorateur SGBD (tri, recherche, pagination, détail)
 │   ├── components/
-│   │   ├── layout/                 # Sidebar, Header, DashboardLayout
-│   │   ├── dashboard/              # KPICard, KPIChart, ComparisonChart, UploadButton
+│   │   ├── layout/
+│   │   │   ├── Sidebar.tsx         # Navigation (Base de données en bas, avant profil)
+│   │   │   └── DashboardLayout.tsx
+│   │   ├── dashboard/              # KPICard, KPIChart, ComparisonChart
 │   │   └── ui/
-│   │       └── MarkdownText.tsx    # Rendu markdown sans dépendance externe
+│   │       └── MarkdownText.tsx    # Rendu Markdown natif : tableaux, titres #–####, listes, gras
 │   ├── lib/
-│   │   ├── api.ts                  # Client Axios + intercepteur JWT (utilise ??)
+│   │   ├── api.ts                  # Client Axios + intercepteur JWT
 │   │   └── types.ts                # Types TypeScript partagés
 │   ├── store/
 │   │   └── auth.ts                 # Zustand store (auth + hydratation)
-│   ├── .dockerignore               # Exclut .env.local du build Docker
-│   └── next.config.js              # Conditionnel static export / server
+│   └── next.config.js
 └── test_files/                     # Fichiers de test pour l'ingestion
-    ├── 01_standard_format.xlsx     # Format standard (pas d'IA nécessaire)
-    ├── 02_colonnes_francaises.xlsx # Colonnes en français → normalisation IA
-    ├── 03_style_rapport.xlsx       # Style rapport avec en-têtes → extraction IA
-    ├── 04_donnees_brutes.csv       # CSV avec séparateur point-virgule et commentaires
-    └── 05_multi_feuilles.xlsx      # 4 feuilles avec colonnes différentes par domaine
+    ├── 01_standard_format.xlsx
+    ├── 02_colonnes_francaises.xlsx
+    ├── 03_style_rapport.xlsx
+    ├── 04_donnees_brutes.csv
+    └── 05_multi_feuilles.xlsx
 ```
 
 ---
@@ -493,16 +534,15 @@ Hack4UCAR/
 git clone https://github.com/Akrem-Alamine/Hack4UCAR.git
 cd Hack4UCAR
 
-# Copier le fichier d'environnement
 cp .env.example .env
 ```
 
 Éditer `.env` et renseigner :
 
 ```env
-GROQ_API_KEY=gsk_...           # Votre clé Groq
+GROQ_API_KEY=gsk_...                    # Votre clé Groq
 JWT_SECRET_KEY=<openssl rand -hex 32>   # Clé secrète forte
-DEBUG=true                     # Exposer /docs en démo (mettre false en production)
+DEBUG=true                              # Exposer /docs en démo (false en production)
 ```
 
 ### 2. Démarrer la stack complète
@@ -511,15 +551,12 @@ DEBUG=true                     # Exposer /docs en démo (mettre false en product
 docker compose up -d --build
 ```
 
-Ce démarrage lance automatiquement : PostgreSQL, Redis, Backend, Celery Worker, Celery Beat, Frontend, Nginx.
+Lance automatiquement : PostgreSQL, Redis, Backend, Celery Worker, Celery Beat, Frontend, Nginx.
 
 ### 3. Initialiser la base de données
 
 ```bash
-# Appliquer les migrations
 docker compose exec backend alembic upgrade head
-
-# Charger les données de démonstration
 docker compose exec backend python -m scripts.seed_demo_data
 ```
 
@@ -530,20 +567,12 @@ docker compose exec backend python -m scripts.seed_demo_data
 | Plateforme (via nginx) | http://localhost |
 | API directe | http://localhost:8000 |
 | Documentation Swagger | http://localhost/docs *(si DEBUG=true)* |
-| Documentation ReDoc | http://localhost/redoc *(si DEBUG=true)* |
 
 ### 5. Rendre la plateforme accessible publiquement
 
 ```bash
-# Installer Cloudflare Tunnel (une seule fois)
-curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
-  -o /usr/local/bin/cloudflared && chmod +x /usr/local/bin/cloudflared
-
-# Lancer le tunnel (donne une URL publique instantanée)
 cloudflared tunnel --url http://localhost:80
 ```
-
-L'URL publique générée (ex : `https://xxx.trycloudflare.com`) est accessible depuis n'importe quel appareil ou réseau.
 
 ---
 
@@ -555,9 +584,9 @@ L'URL publique générée (ex : `https://xxx.trycloudflare.com`) est accessible 
 
 | Email | Accès |
 |---|---|
-| `super@ucar.tn` | Vue consolidée de tous les établissements + classement + comparaison |
+| `super@ucar.tn` | Vue consolidée de tous les établissements + classement + comparaison + explorateur DB |
 
-### Par établissement (même structure pour ENSTAB, IHEC, INSAT, ENIB, FSB, SUP'COM)
+### Par établissement
 
 > Remplacer `<sigle>` par : `enstab`, `ihec`, `insat`, `enib`, `fsb`, `supcom`
 
@@ -571,8 +600,6 @@ L'URL publique générée (ex : `https://xxx.trycloudflare.com`) est accessible 
 | `esg@<sigle>.tn` | Département | ESG / RSE uniquement |
 | `recherche@<sigle>.tn` | Département | Recherche uniquement |
 
-**Règle de scoping** : un compte département ne peut ni voir, ni importer de données en dehors de son domaine — le backend l'applique côté serveur, indépendamment de ce que le frontend envoie.
-
 ---
 
 ## Import de données
@@ -584,51 +611,32 @@ L'URL publique générée (ex : `https://xxx.trycloudflare.com`) est accessible 
 | Colonne | Obligatoire | Description | Exemple |
 |---|---|---|---|
 | `domain` | Oui* | Domaine du KPI | `academic`, `finance`, `hr` |
-| `indicator_key` | Oui | Identifiant snake_case | `success_rate`, `dropout_rate` |
+| `indicator_key` | Oui | Identifiant (normalisé automatiquement) | `success_rate`, `Taux de réussite` |
 | `value` | Oui | Valeur numérique | `82.5` |
 | `unit` | Oui | Unité de mesure | `%`, `TND`, `kWh` |
 | `period_label` | Oui | Libellé de la période | `2024-2025 S1` |
 | `period_start` | Oui | Début de la période | `2024-09-01` |
 | `period_end` | Oui | Fin de la période | `2025-01-31` |
-| `department_code` | Non | Code du département | `FIN`, `RH`, `ACAD` |
+| `department_code` | Non | Code du département | `FIN`, `RH` |
 | `notes` | Non | Commentaire libre | `Données validées` |
 
-> *Pour les comptes département, la colonne `domain` est ignorée — le domaine est forcé à celui du compte.
+#### Clés d'indicateurs acceptées (allowlist canonique)
 
-#### Normalisation IA automatique
-
-Si les colonnes du fichier ne correspondent pas au format standard, Groq analyse les colonnes et les données, puis les mappe automatiquement. Cela permet d'importer :
-- Des fichiers avec des colonnes en français (`Indicateur`, `Valeur`, `Période`…)
-- Des rapports structurés avec des sections et des en-têtes
-- Des CSV avec des séparateurs non standards (`;`)
-
-La réponse indique `"ai_normalized": true` si la normalisation IA a été utilisée.
-
-#### Alias de domaine acceptés
-
-| Valeur | Domaine reconnu |
+| Domaine | Clés acceptées |
 |---|---|
-| `academique`, `académique` | `academic` |
-| `rh`, `ressources humaines` | `hr` |
-| `recherche` | `research` |
-| `partenariats` | `partnerships` |
-| `rse`, `esg` | `esg` |
-| `insertion professionnelle` | `insertion` |
+| Académique | `success_rate`, `attendance_rate`, `dropout_rate`, `repetition_rate`, `enrolled_students` |
+| Finance | `budget_allocated`, `budget_consumed`, `budget_execution_rate`, `cost_per_student` |
+| RH | `teaching_headcount`, `admin_headcount`, `total_staff`, `absenteeism_rate`, `training_hours` |
+| ESG | `energy_consumption_kwh`, `carbon_footprint_ton`, `recycling_rate` |
+| Insertion | `employability_rate`, `national_convention_rate`, `international_convention_rate`, `insertion_delay_months` |
+| Recherche | `publications_count`, `active_projects`, `funding_tnd` |
+| Infrastructure | `equipment_count`, `classroom_occupancy_rate` |
 
-### Documents non structurés (PDF / Images)
+> Les variantes françaises (`Taux de réussite`, `taux d abandon etudiants`…) sont normalisées automatiquement par regex avant la vérification.
 
-Les fichiers `.pdf`, `.png`, `.jpg` sont traités par le pipeline OCR + IA :
+#### Mode dry-run
 
-1. **Extraction texte** : pdfplumber (PDF natif) ou pytesseract (PDF scanné / image)
-2. **Extraction KPIs** : Groq identifie les indicateurs dans le texte libre
-3. **Validation** : score de qualité 0–100, seuls les KPIs avec confiance ≥ 50% sont importés
-4. **Suivi** : job créé en base avec statut polling toutes les 3 secondes
-
-### Endpoint template
-
-```
-GET /api/v1/ingestion/template
-```
+Chaque import Excel/CSV passe d'abord par une validation sans sauvegarde. Si des avertissements sont détectés (normalisation IA, erreurs de format), une popup apparaît avec le détail avant de demander confirmation.
 
 ---
 
@@ -642,6 +650,7 @@ GET /api/v1/ingestion/template
 | `attendance_rate` — Taux de présence | % |
 | `dropout_rate` — Taux d'abandon | % |
 | `repetition_rate` — Taux de redoublement | % |
+| `enrolled_students` — Étudiants inscrits | nombre |
 
 ### Finance (`finance`)
 
@@ -658,6 +667,7 @@ GET /api/v1/ingestion/template
 |---|---|
 | `teaching_headcount` — Effectif enseignant | pers. |
 | `admin_headcount` — Effectif administratif | pers. |
+| `total_staff` — Effectif total | pers. |
 | `absenteeism_rate` — Taux d'absentéisme | % |
 | `training_hours` — Heures de formation | h |
 
@@ -686,6 +696,13 @@ GET /api/v1/ingestion/template
 | `active_projects` — Projets actifs | projets |
 | `funding_tnd` — Financements | TND |
 
+### Infrastructure (`infrastructure`)
+
+| Indicateur | Unité |
+|---|---|
+| `equipment_count` — Nombre d'équipements | nombre |
+| `classroom_occupancy_rate` — Taux d'occupation salles | % |
+
 ---
 
 ## API Reference
@@ -694,14 +711,10 @@ GET /api/v1/ingestion/template
 
 ```http
 POST /api/v1/auth/login
-Content-Type: application/json
-
 { "email": "president@enstab.tn", "password": "demo1234" }
 ```
 
-Limite : **20 tentatives / minute par IP**.
-
-Retourne un `access_token` JWT à inclure dans tous les appels suivants :
+Limite : **20 tentatives / minute par IP**. Retourne un `access_token` JWT.
 
 ```http
 Authorization: Bearer <access_token>
@@ -710,131 +723,86 @@ Authorization: Bearer <access_token>
 ### KPIs
 
 ```http
-# Liste des KPIs (dernier enregistrement par indicateur)
 GET /api/v1/kpis/?institution_id=1&domain=academic
-
-# Tendance historique + prévision IA
 GET /api/v1/kpis/trend?institution_id=1&indicator_key=dropout_rate
-
-# Comparaison inter-établissements (super_admin / president uniquement)
 GET /api/v1/kpis/compare?indicator_key=success_rate
-
-# Indice de santé d'un établissement
 GET /api/v1/kpis/health?institution_id=1
-
-# Classement de tous les établissements (super_admin uniquement)
 GET /api/v1/kpis/ranking
-
-# Insights IA par domaine
 GET /api/v1/kpis/insights?institution_id=1&domain=academic
-
-# Périodes disponibles
-GET /api/v1/kpis/periods?institution_id=1
-
-# Créer un enregistrement KPI
-POST /api/v1/kpis/
 ```
 
 ### Alertes
 
 ```http
-# Liste des alertes (filtrées par institution)
-GET /api/v1/alerts/?unresolved_only=true
-
-# Règles d'alerte
-GET /api/v1/alerts/rules
+GET  /api/v1/alerts/?unresolved_only=true
 POST /api/v1/alerts/rules
-
-# Déclencher une vérification manuelle
 POST /api/v1/alerts/check
-
-# Acquitter une alerte (vérifie que l'alerte appartient à l'institution)
 POST /api/v1/alerts/{id}/acknowledge
 ```
 
 ### Rapports
 
 ```http
-# Demander la génération d'un rapport
 POST /api/v1/reports/
 { "institution_id": 1, "type": "global", "period_label": "2024-2025 S1", "format": "pdf" }
 
-# Liste des rapports
-GET /api/v1/reports/
-
-# Télécharger un rapport (vérifie que le rapport appartient à l'institution)
-GET /api/v1/reports/{id}/download
+GET  /api/v1/reports/
+GET  /api/v1/reports/{id}/download   # Bearer token requis
 ```
 
 ### Chatbot IA
 
 ```http
 POST /api/v1/chat/
-Content-Type: application/json
-
-# Mode standard
-{ "question": "Quel est le taux d'abandon ?", "institution_id": 1, "stream": false }
-
-# Mode streaming SSE
 { "question": "Analysez les KPIs financiers", "institution_id": 1, "stream": true }
 ```
 
-Limite : **30 requêtes / minute par IP**.  
-Taille de la question : maximum **2000 caractères**.
+Limite : **30 requêtes / minute par IP**. Question : max **2000 caractères**.
 
 ### Import de données
 
 ```http
-# Import Excel / CSV (avec normalisation IA si besoin)
+# Dry-run (validation sans sauvegarde)
 POST /api/v1/ingestion/upload
-Content-Type: multipart/form-data
-file=<fichier.xlsx>
-institution_id=1
-period_label_override=2024-2025 S1  (optionnel)
+  file=<fichier.xlsx>  institution_id=1  dry_run=true
 
-# Import PDF / Image (OCR + IA, asynchrone)
+# Import réel
+POST /api/v1/ingestion/upload
+  file=<fichier.xlsx>  institution_id=1  dry_run=false
+
+# PDF / Image (OCR + IA asynchrone)
 POST /api/v1/ingestion/upload-document
-Content-Type: multipart/form-data
-file=<document.pdf>
-institution_id=1
+  file=<document.pdf>  institution_id=1
 
-# Statut d'un job
 GET /api/v1/ingestion/jobs/{job_id}
-
-# Liste des jobs
 GET /api/v1/ingestion/jobs?institution_id=1
-
-# Template de format attendu
 GET /api/v1/ingestion/template
 ```
 
-Contraintes : maximum **50 Mo** par fichier, magic bytes vérifiés.
+### Explorateur base de données (super admin)
+
+```http
+GET /api/v1/db-explorer/tables
+GET /api/v1/db-explorer/tables/{table}/rows?page=1&page_size=50&search=...&sort_col=id&sort_dir=desc
+GET /api/v1/db-explorer/tables/{table}/row/{id}
+```
 
 ---
 
 ## Déploiement public
 
-### Stack locale avec accès internet
-
 ```bash
-# 1. Démarrer la stack
 docker compose up -d
-
-# 2. Initialiser la base
 docker compose exec backend alembic upgrade head
 docker compose exec backend python -m scripts.seed_demo_data
-
-# 3. Exposer publiquement avec Cloudflare Tunnel
 cloudflared tunnel --url http://localhost:80
 ```
 
-L'URL générée est accessible depuis n'importe quel appareil, réseau ou pays — sans configuration routeur.
-
-### Variables d'environnement importantes
+### Variables d'environnement
 
 | Variable | Défaut | Description |
 |---|---|---|
-| `JWT_SECRET_KEY` | *(généré)* | Clé secrète JWT — générer avec `openssl rand -hex 32` |
+| `JWT_SECRET_KEY` | *(généré)* | Clé secrète JWT — `openssl rand -hex 32` |
 | `GROQ_API_KEY` | *(requis)* | Clé API Groq (https://console.groq.com) |
 | `DEBUG` | `false` | `true` pour exposer `/docs` et `/redoc` |
 | `CORS_ORIGINS` | `*` | Origines autorisées — restreindre en production |
@@ -843,8 +811,6 @@ L'URL générée est accessible depuis n'importe quel appareil, réseau ou pays 
 ---
 
 ## Données de démonstration
-
-Le script `seed_demo_data.py` génère des données réelles pour 5 établissements de l'**Université de Carthage** :
 
 Le script `seed_demo_data.py` génère des données réelles pour 6 établissements de l'**Université de Carthage** :
 
@@ -862,7 +828,7 @@ Le script `seed_demo_data.py` génère des données réelles pour 6 établisseme
 | Établissements | 6 (ENSTAB, IHEC, INSAT, ENIB, FSB, SUP'COM) |
 | Départements | 36 (6 par établissement) |
 | Utilisateurs | 43 (1 super admin + 1 président + 6 départements × 6 établissements) |
-| Enregistrements KPI | 396 (6 établissements × 6 domaines × ~4 indicateurs × 3 semestres) |
+| Enregistrements KPI | ~396 (6 établissements × 6 domaines × ~4 indicateurs × 3 semestres) |
 | Règles d'alerte | 4 (abandon critique, réussite faible, budget, absentéisme) |
 | Alertes déclenchées | ~4 (1 critique ENSTAB, 1 avertissement ENIB, 1 info, 1 avertissement budget) |
 
@@ -881,12 +847,12 @@ Le script `seed_demo_data.py` génère des données réelles pour 6 établisseme
 
 | Critère | Notre réponse |
 |---|---|
-| **Impact** | Couvre les 4 tracks, 6+ domaines KPI, 30+ établissements, 14 processus institutionnels |
-| **Innovation** | IA au cœur : Z-score, régression linéaire, OCR, LLM streaming, ranking, health index |
-| **Utilisabilité** | Interface 100% française, accès par rôle, import Excel/PDF sans code, chatbot naturel |
+| **Impact** | Couvre les 4 tracks, 7 domaines KPI, 27 indicateurs, 30+ établissements, 14 processus institutionnels |
+| **Innovation** | IA au cœur : Z-score, régression linéaire, OCR, LLM streaming, ranking, health index, DB explorer |
+| **Utilisabilité** | Interface 100% française, accès par rôle, import Excel/PDF sans code, chatbot naturel avec Markdown |
 | **Scalabilité** | Architecture multi-tenant, Docker, API versionnée, Celery pour les jobs asynchrones |
-| **Faisabilité** | Import Excel (workflow existant), PDF export, données réalistes tunisiennes |
-| **Sécurité** | 14 vulnérabilités corrigées, défense en profondeur, rate limiting, IDOR protégé |
+| **Faisabilité** | Import Excel (workflow existant), PDF export, données réalistes tunisiennes, upsert intelligent |
+| **Sécurité** | 15+ mesures de sécurité, défense en profondeur, rate limiting, IDOR protégé, allowlist stricte |
 
 ---
 

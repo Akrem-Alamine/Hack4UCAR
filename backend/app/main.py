@@ -61,3 +61,46 @@ def check_security_config():
             "Then set JWT_SECRET_KEY=<output> in your .env file.\n",
             file=sys.stderr,
         )
+
+
+@app.on_event("startup")
+def recover_stuck_jobs():
+    """
+    On every restart, any job left in 'processing' state was killed mid-flight.
+    Re-queue them so they complete instead of hanging forever.
+    """
+    from app.core.database import SessionLocal
+    from app.models.ingestion_job import IngestionJob, JobStatus
+
+    db = SessionLocal()
+    try:
+        # Re-queue jobs stuck in 'processing' (killed mid-flight) and 'pending' document jobs
+        stuck = db.query(IngestionJob).filter(
+            IngestionJob.status.in_([JobStatus.processing, JobStatus.pending]),
+            IngestionJob.source_type.in_(["pdf", "image"]),
+        ).all()
+        for job in stuck:
+            job.status = JobStatus.pending
+        if stuck:
+            db.commit()
+            print(f"[startup] Re-queueing {len(stuck)} unfinished document job(s).", file=sys.stderr)
+            import threading
+            from app.api.v1.ingestion import _process_document_job
+            for job in stuck:
+                if job.file_path:
+                    from pathlib import Path
+                    p = Path(job.file_path)
+                    if p.exists():
+                        file_bytes = p.read_bytes()
+                        t = threading.Thread(
+                            target=_process_document_job,
+                            args=(job.id, file_bytes, job.original_filename),
+                            daemon=True,
+                        )
+                        t.start()
+                    else:
+                        job.status = JobStatus.failed
+                        job.error_message = "Fichier source introuvable après redémarrage."
+            db.commit()
+    finally:
+        db.close()
