@@ -225,10 +225,11 @@ def _seed_kpis(institutions: list[Institution]):
         ]
     for i, (teach, admin, abs_, train) in enumerate([(120, 45, 4.2, 320), (120, 45, 3.8, 340), (122, 46, 5.1, 290)]):
         records += [
-            _kpi(enstab.id, "hr", "teaching_headcount", teach, "pers.", i),
-            _kpi(enstab.id, "hr", "admin_headcount",    admin, "pers.", i),
-            _kpi(enstab.id, "hr", "absenteeism_rate",   abs_,  "%",    i),
-            _kpi(enstab.id, "hr", "training_hours",     train, "h",    i),
+            _kpi(enstab.id, "hr", "teaching_headcount", teach,        "pers.", i),
+            _kpi(enstab.id, "hr", "admin_headcount",    admin,        "pers.", i),
+            _kpi(enstab.id, "hr", "total_staff",        teach + admin,"pers.", i),
+            _kpi(enstab.id, "hr", "absenteeism_rate",   abs_,         "%",    i),
+            _kpi(enstab.id, "hr", "training_hours",     train,        "h",    i),
         ]
     for i, (emp, nat, intl, delay) in enumerate([(72, 65, 18, 5.2), (74, 66, 20, 5.0), (71, 64, 19, 5.4)]):
         records += [
@@ -268,10 +269,11 @@ def _seed_kpis(institutions: list[Institution]):
         ]
     for i, (teach, admin, abs_, train) in enumerate([(180, 60, 3.5, 360), (181, 61, 3.4, 370), (182, 62, 3.6, 355)]):
         records += [
-            _kpi(ihec.id, "hr", "teaching_headcount", teach, "pers.", i),
-            _kpi(ihec.id, "hr", "admin_headcount",    admin, "pers.", i),
-            _kpi(ihec.id, "hr", "absenteeism_rate",   abs_,  "%",    i),
-            _kpi(ihec.id, "hr", "training_hours",     train, "h",    i),
+            _kpi(ihec.id, "hr", "teaching_headcount", teach,        "pers.", i),
+            _kpi(ihec.id, "hr", "admin_headcount",    admin,        "pers.", i),
+            _kpi(ihec.id, "hr", "total_staff",        teach + admin,"pers.", i),
+            _kpi(ihec.id, "hr", "absenteeism_rate",   abs_,         "%",    i),
+            _kpi(ihec.id, "hr", "training_hours",     train,        "h",    i),
         ]
     # Légère baisse des conventions internationales sur les 3 semestres
     for i, (emp, nat, intl, delay) in enumerate([(82, 75, 30, 4.2), (81, 74, 27, 4.4), (80, 73, 24, 4.6)]):
@@ -312,10 +314,11 @@ def _seed_kpis(institutions: list[Institution]):
         ]
     for i, (teach, admin, abs_, train) in enumerate([(250, 85, 2.8, 680), (252, 86, 2.6, 710), (255, 88, 2.7, 730)]):
         records += [
-            _kpi(insat.id, "hr", "teaching_headcount", teach, "pers.", i),
-            _kpi(insat.id, "hr", "admin_headcount",    admin, "pers.", i),
-            _kpi(insat.id, "hr", "absenteeism_rate",   abs_,  "%",    i),
-            _kpi(insat.id, "hr", "training_hours",     train, "h",    i),
+            _kpi(insat.id, "hr", "teaching_headcount", teach,        "pers.", i),
+            _kpi(insat.id, "hr", "admin_headcount",    admin,        "pers.", i),
+            _kpi(insat.id, "hr", "total_staff",        teach + admin,"pers.", i),
+            _kpi(insat.id, "hr", "absenteeism_rate",   abs_,         "%",    i),
+            _kpi(insat.id, "hr", "training_hours",     train,        "h",    i),
         ]
     for i, (emp, nat, intl, delay) in enumerate([(88, 80, 38, 3.5), (90, 82, 40, 3.2), (89, 81, 39, 3.4)]):
         records += [
@@ -355,10 +358,11 @@ def _seed_kpis(institutions: list[Institution]):
         ]
     for i, (teach, admin, abs_, train) in enumerate([(175, 58, 4.5, 390), (177, 59, 4.8, 410), (180, 60, 5.2, 420)]):
         records += [
-            _kpi(enib.id, "hr", "teaching_headcount", teach, "pers.", i),
-            _kpi(enib.id, "hr", "admin_headcount",    admin, "pers.", i),
-            _kpi(enib.id, "hr", "absenteeism_rate",   abs_,  "%",    i),
-            _kpi(enib.id, "hr", "training_hours",     train, "h",    i),
+            _kpi(enib.id, "hr", "teaching_headcount", teach,        "pers.", i),
+            _kpi(enib.id, "hr", "admin_headcount",    admin,        "pers.", i),
+            _kpi(enib.id, "hr", "total_staff",        teach + admin,"pers.", i),
+            _kpi(enib.id, "hr", "absenteeism_rate",   abs_,         "%",    i),
+            _kpi(enib.id, "hr", "training_hours",     train,        "h",    i),
         ]
     for i, (emp, nat, intl, delay) in enumerate([(76, 68, 20, 5.0), (78, 70, 22, 4.7), (77, 69, 21, 4.8)]):
         records += [
@@ -398,10 +402,11 @@ def _seed_kpis(institutions: list[Institution]):
         ]
     for i, (teach, admin, abs_, train) in enumerate([(310, 105, 5.0, 530), (312, 106, 4.8, 550), (315, 108, 4.9, 560)]):
         records += [
-            _kpi(fsb.id, "hr", "teaching_headcount", teach, "pers.", i),
-            _kpi(fsb.id, "hr", "admin_headcount",    admin, "pers.", i),
-            _kpi(fsb.id, "hr", "absenteeism_rate",   abs_,  "%",    i),
-            _kpi(fsb.id, "hr", "training_hours",     train, "h",    i),
+            _kpi(fsb.id, "hr", "teaching_headcount", teach,        "pers.", i),
+            _kpi(fsb.id, "hr", "admin_headcount",    admin,        "pers.", i),
+            _kpi(fsb.id, "hr", "total_staff",        teach + admin,"pers.", i),
+            _kpi(fsb.id, "hr", "absenteeism_rate",   abs_,         "%",    i),
+            _kpi(fsb.id, "hr", "training_hours",     train,        "h",    i),
         ]
     for i, (emp, nat, intl, delay) in enumerate([(66, 59, 13, 6.2), (67, 60, 13, 6.0), (67, 60, 14, 6.1)]):
         records += [
@@ -441,10 +446,11 @@ def _seed_kpis(institutions: list[Institution]):
         ]
     for i, (teach, admin, abs_, train) in enumerate([(115, 38, 6.0, 220), (117, 39, 5.5, 240), (120, 40, 5.0, 260)]):
         records += [
-            _kpi(supcom.id, "hr", "teaching_headcount", teach, "pers.", i),
-            _kpi(supcom.id, "hr", "admin_headcount",    admin, "pers.", i),
-            _kpi(supcom.id, "hr", "absenteeism_rate",   abs_,  "%",    i),
-            _kpi(supcom.id, "hr", "training_hours",     train, "h",    i),
+            _kpi(supcom.id, "hr", "teaching_headcount", teach,        "pers.", i),
+            _kpi(supcom.id, "hr", "admin_headcount",    admin,        "pers.", i),
+            _kpi(supcom.id, "hr", "total_staff",        teach + admin,"pers.", i),
+            _kpi(supcom.id, "hr", "absenteeism_rate",   abs_,         "%",    i),
+            _kpi(supcom.id, "hr", "training_hours",     train,        "h",    i),
         ]
     for i, (emp, nat, intl, delay) in enumerate([(68, 60, 28, 5.8), (71, 63, 31, 5.5), (74, 65, 34, 5.2)]):
         records += [
