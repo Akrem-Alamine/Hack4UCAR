@@ -857,7 +857,7 @@ Le script `seed_demo_data.py` génère des données réelles pour 6 établisseme
 |---|---|
 | Établissements | 6 (ENSTAB, IHEC, INSAT, ENIB, FSB, SUP'COM) |
 | Départements | 36 (6 par établissement) |
-| Utilisateurs | 43 (1 super admin + 1 président + 6 départements × 6 établissements) |
+| Utilisateurs | 43 (1 super admin + (1 président + 6 départements) × 6 établissements) |
 | Enregistrements KPI | ~396 (6 établissements × 6 domaines × ~4 indicateurs × 3 semestres) |
 | Règles d'alerte | 4 (abandon critique, réussite faible, budget, absentéisme) |
 | Alertes déclenchées | ~4 (1 critique ENSTAB, 1 avertissement ENIB, 1 info, 1 avertissement budget) |
