@@ -58,6 +58,57 @@ CANONICAL_KEYS: frozenset[str] = frozenset({
     "equipment_count", "classroom_occupancy_rate",
 })
 
+# Sanity bounds (min, max) per canonical key.
+# Values outside this range are rejected on import — prevents garbage from AI/OCR
+# landing in the dashboard (e.g. total_staff=10, success_rate=150).
+_VALUE_BOUNDS: dict[str, tuple[float, float]] = {
+    # Percentages
+    "success_rate":                  (0,   100),
+    "attendance_rate":               (0,   100),
+    "dropout_rate":                  (0,   100),
+    "repetition_rate":               (0,   100),
+    "absenteeism_rate":              (0,   100),
+    "budget_execution_rate":         (0,   200),   # >100 is possible (overspend)
+    "recycling_rate":                (0,   100),
+    "employability_rate":            (0,   100),
+    "national_convention_rate":      (0,   100),
+    "international_convention_rate": (0,   100),
+    "classroom_occupancy_rate":      (0,   100),
+    # Headcounts — a university cannot have fewer than 5 staff
+    "teaching_headcount":            (5,   50_000),
+    "admin_headcount":               (2,   50_000),
+    "total_staff":                   (5,   100_000),
+    "enrolled_students":             (50,  200_000),
+    # Financial (TND)
+    "budget_allocated":              (1_000, 1e10),
+    "budget_consumed":               (0,     1e10),
+    "cost_per_student":              (10,    1e7),
+    # ESG
+    "energy_consumption_kwh":        (500,  1e9),
+    "carbon_footprint_ton":          (1,    1e6),
+    # Insertion
+    "insertion_delay_months":        (0.5,  120),
+    # Research
+    "publications_count":            (0,    50_000),
+    "active_projects":               (0,    10_000),
+    "funding_tnd":                   (0,    1e10),
+    # Infrastructure
+    "equipment_count":               (0,    1e6),
+    "training_hours":                (0,    500_000),
+}
+
+
+def _check_value_bounds(key: str, value: float) -> str | None:
+    """Return an error message if value is outside allowed range, else None."""
+    bounds = _VALUE_BOUNDS.get(key)
+    if bounds is None:
+        return None
+    lo, hi = bounds
+    if not (lo <= value <= hi):
+        return f"Valeur hors limites pour '{key}' : {value} (attendu entre {lo} et {hi})"
+    return None
+
+
 # Keyword patterns for indicator key normalization — order matters (first match wins)
 # Each tuple: (regex pattern to search in normalized key, canonical key)
 _INDICATOR_PATTERNS = [
@@ -339,6 +390,11 @@ async def upload_kpi_file(
             errors.append({"row": row_num, "error": f"Indicateur non reconnu : '{indicator_key}'"})
             continue
 
+        bounds_error = _check_value_bounds(indicator_key, value)
+        if bounds_error:
+            errors.append({"row": row_num, "error": bounds_error})
+            continue
+
         unit = str(row.get("unit", "")).strip()
         period_label = period_label_override or str(row.get("period_label", "")).strip()
         notes = str(row.get("notes", "")).strip() if "notes" in df.columns else None
@@ -529,6 +585,9 @@ def _process_document_job(job_id: int, file_bytes: bytes, filename: str):
                 norm_key = _normalize_indicator_key(kpi["indicator_key"])
                 if norm_key not in CANONICAL_KEYS:
                     continue
+
+                if _check_value_bounds(norm_key, float(kpi["value"])):
+                    continue  # silently skip out-of-range values from OCR/AI
 
                 existing = db.query(KPIRecord).filter(
                     KPIRecord.institution_id == job.institution_id,

@@ -1,8 +1,23 @@
+import re
+from datetime import date
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
 from app.models.kpi import KPIRecord
 from app.models.institution import Institution
 from app.ai.anomaly import detect_anomaly, forecast_linear
+
+# Standard semester format — only these period labels are used for latest/trend logic
+_STANDARD_PERIOD = re.compile(r"^\d{4}-\d{4} S[12]$")
+
+
+def _is_standard(label: str | None) -> bool:
+    return bool(_STANDARD_PERIOD.match(label or ""))
+
+
+def _sort_key(record: KPIRecord):
+    """Standard-format periods rank above garbage ones; within each group, newest first."""
+    ps = record.period_start or date(1970, 1, 1)
+    return (0 if _is_standard(record.period_label) else 1, -ps.toordinal())
 
 
 def get_latest_kpis(db: Session, institution_id: int | None, domain: str | None = None) -> list[dict]:
@@ -16,7 +31,9 @@ def get_latest_kpis(db: Session, institution_id: int | None, domain: str | None 
     if domain:
         query = query.filter(KPIRecord.domain == domain)
 
-    all_records = query.order_by(KPIRecord.institution_id, KPIRecord.indicator_key, KPIRecord.period_start.desc()).all()
+    raw = query.all()
+    # Sort: standard-semester records first (newest first), then non-standard last
+    all_records = sorted(raw, key=lambda x: _sort_key(x[0]))
 
     seen = set()
     results = []
@@ -67,6 +84,8 @@ def get_kpi_trend(db: Session, institution_id: int, indicator_key: str) -> dict:
         .order_by(KPIRecord.period_start.asc())
         .all()
     )
+    # Only include standard-semester records in trend charts
+    records = [r for r in records if _is_standard(r.period_label)]
 
     if not records:
         return {}
