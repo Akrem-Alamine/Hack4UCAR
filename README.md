@@ -122,12 +122,12 @@ Une plateforme unique qui :
 
 ```
 ┌───────────────────────────────────────────────────────────────────┐
-│                    CLOUDFLARE TUNNEL (public)                      │
-│              https://<slug>.trycloudflare.com                      │
+│                    CLOUDFLARE TUNNEL (public)                     │
+│              https://<slug>.trycloudflare.com                     │
 └──────────────────────────────┬────────────────────────────────────┘
                                │
 ┌──────────────────────────────▼────────────────────────────────────┐
-│                    NGINX REVERSE PROXY (:80)                       │
+│                    NGINX REVERSE PROXY (:80)                      │
 │  /api/*  →  backend:8000    /  →  frontend:3000                   │
 │  Security headers · client_max_body_size 50M · server_tokens off  │
 └──────────────┬──────────────────────────────────┬─────────────────┘
@@ -151,11 +151,11 @@ Une plateforme unique qui :
          │
     ┌────┴──────────────────────────────┐
     │           COUCHE IA               │
-    │  Groq LLM (chatbot + rapports)   │
-    │  Z-score → anomalies             │
-    │  Régression linéaire → prévision │
-    │  pdfplumber + pytesseract (OCR)  │
-    │  ReportLab (exports PDF)         │
+    │  Groq LLM (chatbot + rapports)    │
+    │  Z-score → anomalies              │
+    │  Régression linéaire → prévision  │
+    │  pdfplumber + pytesseract (OCR)   │
+    │  ReportLab (exports PDF)          │
     └───────────────────────────────────┘
 ```
 
