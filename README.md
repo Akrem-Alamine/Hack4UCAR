@@ -888,4 +888,5 @@ Le script `seed_demo_data.py` génère des données réelles pour 6 établisseme
 
 ## Équipe
 
+KawKab Zoumoroda
 Développé pour **HACK4UCAR 2025** — Université de Carthage · ACM ENSTAB
